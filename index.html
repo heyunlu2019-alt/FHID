@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>成舍企業 合約產生系統</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app-header no-print">
+  <h1>合約產生系統</h1>
+  <nav class="type-tabs">
+    <button class="tab-btn active" data-type="engineering">工程合約</button>
+    <button class="tab-btn" data-type="design_general">設計合約</button>
+    <button class="tab-btn" data-type="design_custom">客變專用合約</button>
+  </nav>
+</header>
+
+<main class="app-main">
+
+  <section class="form-panel no-print">
+    <div class="toolbar">
+      <button id="btnPrint">🖨 列印 / 另存 PDF</button>
+      <button id="btnWord">📄 另存 Word</button>
+      <button id="btnReset">↺ 清空表單</button>
+    </div>
+
+    <form id="contractForm">
+
+      <fieldset>
+        <legend>封面資訊</legend>
+        <label>專案編號 <input type="text" name="cover_projectNo"></label>
+        <label>專案名稱 <input type="text" name="cover_projectName"></label>
+        <label>工程地址 <input type="text" name="cover_siteAddress"></label>
+        <label>設計師 <input type="text" name="cover_designer"></label>
+        <label>經辦分公司
+          <select name="branch" id="branchSelect"></select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>甲方（客戶）資訊</legend>
+        <label>甲方名稱 <input type="text" name="partyA_name"></label>
+        <label>負責人 <input type="text" name="partyA_rep"></label>
+        <label>代理人 <input type="text" name="partyA_agent"></label>
+        <label>地址 <input type="text" name="partyA_address"></label>
+        <label>統一編號/身分證字號 <input type="text" name="partyA_id"></label>
+        <label>電話 <input type="text" name="partyA_phone"></label>
+        <label>傳真 <input type="text" name="partyA_fax"></label>
+        <label>行動電話 <input type="text" name="partyA_mobile"></label>
+        <label>E-mail <input type="text" name="partyA_email"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>乙方（本公司）資訊 <small>依分公司自動帶入，可手動修改</small></legend>
+        <label>乙方名稱 <input type="text" name="partyB_branchName"></label>
+        <label>負責人 <input type="text" name="partyB_rep"></label>
+        <label>代理人 <input type="text" name="partyB_agent"></label>
+        <label>地址 <input type="text" name="partyB_address"></label>
+        <label>統一編號 <input type="text" name="partyB_id"></label>
+        <label>電話 <input type="text" name="partyB_phone"></label>
+        <label>傳真 <input type="text" name="partyB_fax"></label>
+        <label>專案設計師 <input type="text" name="partyB_designer"></label>
+        <label>E-mail <input type="text" name="partyB_email"></label>
+      </fieldset>
+
+      <fieldset id="fieldset_engineering">
+        <legend>工程內容</legend>
+        <label>工程名稱 <input type="text" name="eng_projectName"></label>
+        <label>工程地點 <input type="text" name="eng_projectLocation"></label>
+        <label>工程總價（新台幣） <input type="number" name="eng_totalAmount" min="0" step="1"></label>
+        <label>稅別
+          <select name="eng_taxNote">
+            <option value="含稅">含稅</option>
+            <option value="未稅">未稅</option>
+          </select>
+        </label>
+        <label>開工日 <input type="date" name="eng_startDate"></label>
+        <label>完工日 <input type="date" name="eng_endDate"></label>
+        <label>匯款銀行 <input type="text" name="eng_bank" value="822中國信託(承德分行)"></label>
+        <label>匯款戶名 <input type="text" name="eng_bankAccountName" value="成舍企業股份有限公司"></label>
+        <label>匯款帳號 <input type="text" name="eng_bankAccount" value="624-53000074-9"></label>
+      </fieldset>
+
+      <fieldset id="fieldset_eng_payment">
+        <legend>工程付款方案</legend>
+        <label>付款方案
+          <select id="engPresetSelect" name="eng_preset">
+            <option value="small">小型商辦（簽約60% / 木作30% / 完工10%）</option>
+            <option value="standard" selected>一般案件・大型商辦（簽約30% / 木作30% / 油漆30% / 完工10%）</option>
+            <option value="custom">自訂</option>
+          </select>
+        </label>
+        <label>分幾期
+          <select id="engInstallmentCount" name="eng_installmentCount">
+            <option value="2">2期</option>
+            <option value="3">3期</option>
+            <option value="4" selected>4期</option>
+            <option value="5">5期</option>
+          </select>
+        </label>
+        <div class="hint">各期工程節點・比例・大致付款時間（可自行編輯）：</div>
+        <div class="payment-row-grid">
+          <span></span><span class="hcell">工程節點</span><span class="hcell">比例%</span><span class="hcell">大致時間</span>
+          <div class="pay-row" data-idx="1"><span>第一期</span><input type="text" name="eng_ms1_label"><input type="number" name="eng_ms1_pct" min="0" max="100"><input type="text" name="eng_ms1_timing"></div>
+          <div class="pay-row" data-idx="2"><span>第二期</span><input type="text" name="eng_ms2_label"><input type="number" name="eng_ms2_pct" min="0" max="100"><input type="text" name="eng_ms2_timing"></div>
+          <div class="pay-row" data-idx="3"><span>第三期</span><input type="text" name="eng_ms3_label"><input type="number" name="eng_ms3_pct" min="0" max="100"><input type="text" name="eng_ms3_timing"></div>
+          <div class="pay-row" data-idx="4"><span>第四期</span><input type="text" name="eng_ms4_label"><input type="number" name="eng_ms4_pct" min="0" max="100"><input type="text" name="eng_ms4_timing"></div>
+          <div class="pay-row" data-idx="5"><span>第五期</span><input type="text" name="eng_ms5_label"><input type="number" name="eng_ms5_pct" min="0" max="100"><input type="text" name="eng_ms5_timing"></div>
+        </div>
+        <div class="hint" id="engPctSumHint"></div>
+      </fieldset>
+
+      <fieldset id="fieldset_eng_appendix">
+        <legend>工程合約附件張數</legend>
+        <label class="inline">工程單價表 <input type="number" name="app_priceList" min="0" value="1" style="width:4em"> 張</label>
+        <label class="inline">工程設計圖 <input type="number" name="app_designDrawing" min="0" value="1" style="width:4em"> 張</label>
+        <label class="inline">工程進度表 <input type="number" name="app_schedule" min="0" value="1" style="width:4em"> 張</label>
+        <label class="inline">各部施工圖 <input type="number" name="app_shopDrawing" min="0" value="1" style="width:4em"> 張</label>
+        <label class="inline">家具估價單 <input type="number" name="app_furnitureQuote" min="0" value="0" style="width:4em"> 張</label>
+      </fieldset>
+
+      <fieldset id="fieldset_design">
+        <legend>設計案內容</legend>
+        <label>案件地址 <input type="text" name="design_siteAddress"></label>
+        <label>設計案名稱 <input type="text" name="design_caseName"></label>
+        <label>立約目的日期（民國，留空預設今天） <input type="text" name="design_caseDate" placeholder="例：115年7月4日"></label>
+        <label>每坪設計費（新台幣） <input type="number" name="design_pricePerPing" min="0" step="1"></label>
+        <label>坪數 <input type="number" name="design_ping" min="0" step="0.1"></label>
+        <label>總計費用（新台幣，留空則＝每坪×坪數，可直接手動覆蓋） <input type="number" name="design_totalFeeOverride" min="0" step="1"></label>
+        <div class="hint" id="designTotalPreview"></div>
+        <div class="hint">各階段付款比例（%，可調整；總和建議為100）：</div>
+        <label class="inline">簽約/第一階段 <input type="number" name="design_pct1" min="0" max="100" step="1" style="width:4.5em"> %</label>
+        <label class="inline">第二階段 <input type="number" name="design_pct2" min="0" max="100" step="1" style="width:4.5em"> %</label>
+        <label class="inline">第三階段 <input type="number" name="design_pct3" min="0" max="100" step="1" style="width:4.5em"> %</label>
+        <label class="inline" id="pct4Wrapper">第四階段 <input type="number" name="design_pct4" min="0" max="100" step="1" style="width:4.5em"> %</label>
+        <div class="hint" id="pctSumHint"></div>
+        <label>匯款銀行 <input type="text" name="design_bank" value="中國信託(承德分行)"></label>
+        <label>匯款戶名 <input type="text" name="design_bankAccountName" value="成舍企業股份有限公司復興分公司"></label>
+        <label>匯款帳號 <input type="text" name="design_bankAccount" value="624-540010570100"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>簽約日期</legend>
+        <label>簽約日期 <input type="date" id="signDateInput" name="signDate"></label>
+      </fieldset>
+
+    </form>
+  </section>
+
+  <section class="preview-panel">
+    <div id="previewRoot" class="preview-root"></div>
+  </section>
+
+</main>
+
+<script src="lib/html-docx.js"></script>
+<script src="templates.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
