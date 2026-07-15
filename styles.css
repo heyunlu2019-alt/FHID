@@ -210,7 +210,9 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .sign-table { margin-top: 24px; }
 .sign-table td { vertical-align: top; padding: 6px 14px 6px 0; font-size: 18px; line-height: 1.75; }
 /* 簽名欄各列加大間距，預留用印大小章位置 */
-.sign-col div { border-bottom: 1px dotted #ccc; padding: 14px 0; }
+.sign-col div { border-bottom: 1px dotted #ccc; padding: 18px 0; }
+/* 第一列(甲方/乙方名稱)下方預留公司大章用印空間 */
+.sign-col div:first-child { padding-bottom: 48px; }
 
 .doc-footer { text-align: center; margin-top: 30px; font-size: 18px; letter-spacing: 2px; }
 
