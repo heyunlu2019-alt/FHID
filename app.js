@@ -188,10 +188,10 @@ function buildPaymentTable(totalAmount, rows) {
   const sumButLast = amounts.slice(0, -1).reduce((a, b) => a + b, 0);
   if (amounts.length) amounts[amounts.length - 1] = total - sumButLast;
   const trs = rows.map((r, i) =>
-    `<tr><td>第${cnOrdinal[i] || i + 1}期${r.label ? "－" + r.label : ""}</td><td>${r.timing || ""}</td><td>${r.pct}%</td><td>新台幣 ${fmtMoney(amounts[i])} 元整</td></tr>`
+    `<tr><td class="cell-period">第${cnOrdinal[i] || i + 1}期${r.label ? "－" + r.label : ""}</td><td>${r.timing || ""}</td><td class="cell-pct">${r.pct}%</td><td class="cell-amount">新台幣 ${fmtMoney(amounts[i])} 元整</td></tr>`
   ).join("");
   return `<table class="payment-table"><thead><tr><th>期別</th><th>付款條件</th><th>比例</th><th>金額</th></tr></thead><tbody>${trs}</tbody>
-  <tfoot><tr><td colspan="3">合計（工程總價）</td><td>新台幣 ${fmtMoney(total)} 元整</td></tr></tfoot></table>`;
+  <tfoot><tr><td colspan="3">合計（工程總價）</td><td class="cell-amount">新台幣 ${fmtMoney(total)} 元整</td></tr></tfoot></table>`;
 }
 
 const STAGE_DEFS = {
@@ -221,22 +221,82 @@ function buildStageTable(variant, totalFee, pcts) {
   const sumButLast = amounts.slice(0, -1).reduce((a, b) => a + b, 0);
   amounts[amounts.length - 1] = total - sumButLast;
   const rows = stages.map((s, i) =>
-    `<tr><td>${s.name}</td><td>${s.items.join("、")}</td><td>${(s.pct*100).toFixed(0)}%</td><td>新台幣 ${fmtMoney(amounts[i])} 元整</td></tr>`
+    `<tr><td class="cell-period">${s.name}</td><td>${s.items.join("、")}</td><td class="cell-pct">${(s.pct*100).toFixed(0)}%</td><td class="cell-amount">新台幣 ${fmtMoney(amounts[i])} 元整</td></tr>`
   ).join("");
   return `<table class="stage-table"><thead><tr><th>階段</th><th>應備文件及圖說</th><th>比例</th><th>金額</th></tr></thead><tbody>${rows}</tbody>
-  <tfoot><tr><td colspan="3">合計</td><td>新台幣 ${fmtMoney(total)} 元整</td></tr></tfoot></table>`;
+  <tfoot><tr><td colspan="3">合計</td><td class="cell-amount">新台幣 ${fmtMoney(total)} 元整</td></tr></tfoot></table>`;
 }
 
 // ---------------- 分頁 ----------------
+// 依區塊實際高度自動分頁：每頁盡量填滿，避免半頁空白。
+
+let _pxPerMmCache = null;
+function pxPerMm() {
+  if (_pxPerMmCache) return _pxPerMmCache;
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;visibility:hidden;height:100mm;width:1px;";
+  document.body.appendChild(probe);
+  _pxPerMmCache = probe.offsetHeight / 100;
+  document.body.removeChild(probe);
+  return _pxPerMmCache;
+}
+
+// 把「（一）（二）…」條款項目與「1、/(1)/1.1」子項拆成獨立段落，
+// 項目之間才有空行、分頁也更平均（大段落不會整塊跳頁留下半頁空白）
+function splitClauseItems(html) {
+  return html
+    .replace(/<br>\s*(?=（[一二三四五六七八九十]{1,3}）)/g, "</p><p>")
+    .replace(/<br>\s*(?=　[\(（]?\d)/g, "</p><p>")
+    .replace(/<br>\s*(?=\d\.\d　)/g, "</p><p>");
+}
 
 function paginate(html, docCode) {
-  const parts = html.split("<!--PAGEBREAK-->");
-  const total = parts.length;
-  return parts.map((part, i) => (
-    `<section class="page contract-page">${part}` +
+  html = splitClauseItems(html.replace(/<!--PAGEBREAK-->/g, ""));
+
+  // 用隱藏的同尺寸頁面量測每個區塊高度
+  const measurer = document.createElement("section");
+  measurer.className = "page contract-page";
+  measurer.style.cssText = "position:absolute;left:-9999px;top:0;";
+  document.body.appendChild(measurer);
+  measurer.innerHTML = html;
+
+  const mm = pxPerMm();
+  const availHeight = (297 - 18 - 18) * mm - 62; // A4 高度 － 上下留白 － 頁尾（含列印誤差安全邊距）
+
+  const blocks = Array.from(measurer.children).map(el => {
+    const st = getComputedStyle(el);
+    const mT = parseFloat(st.marginTop), mB = parseFloat(st.marginBottom);
+    return {
+      html: el.outerHTML,
+      h: el.offsetHeight + mT + mB,
+      isHeading: el.tagName === "P" && !!el.querySelector("b") && el.textContent.trim().length <= 16
+    };
+  });
+  document.body.removeChild(measurer);
+
+  // 表格（及所有區塊）整塊不跨頁；條文標題不孤懸頁底
+  const pages = [];
+  let cur = [];
+  let curH = 0;
+  blocks.forEach((b, i) => {
+    const next = blocks[i + 1];
+    const groupH = (b.isHeading && next) ? b.h + next.h : b.h;
+    if (cur.length && curH + groupH > availHeight) {
+      pages.push(cur);
+      cur = [];
+      curH = 0;
+    }
+    cur.push(b.html);
+    curH += b.h;
+  });
+  if (cur.length) pages.push(cur);
+
+  const total = pages.length;
+  return pages.map((els, i) =>
+    `<section class="page contract-page">${els.join("")}` +
     `<div class="page-footer"><span>第 ${i + 1} 頁，共 ${total} 頁</span><span>${docCode}</span></div>` +
     `</section>`
-  )).join("");
+  ).join("");
 }
 
 // ---------------- 表單 <-> 分公司預設值 ----------------
@@ -354,10 +414,11 @@ function buildFileName(ext) {
 }
 
 const WORD_EXPORT_CSS = `
-body{font-family:"PMingLiU","新細明體","MingLiU",serif;font-size:12pt;line-height:1.8;}
+body{font-family:"SimSun","宋体","NSimSun","PMingLiU","新細明體",serif;font-size:12pt;line-height:1.9;}
 .page{page-break-after:always;}
-table{border-collapse:collapse;width:100%;}
-td,th{border:1px solid #999;padding:4px 6px;font-size:10.5pt;vertical-align:top;}
+table{border-collapse:collapse;width:100%;page-break-inside:avoid;}
+tr{page-break-inside:avoid;}
+td,th{border:1px solid #999;padding:5px 7px;font-size:11.5pt;vertical-align:top;}
 .doc-title{text-align:center;font-size:18pt;font-weight:bold;margin-bottom:16pt;letter-spacing:6px;}
 .cover-title{text-align:center;font-size:20pt;font-weight:bold;letter-spacing:4px;}
 .fill{border-bottom:1px solid #999;padding:0 4px;}
