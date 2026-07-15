@@ -238,6 +238,37 @@ function buildStageTable(variant, totalFee, pcts) {
   <tfoot><tr><td colspan="3">合計</td><td class="cell-amount">新台幣 ${fmtMoney(total)} 元整</td></tr></tfoot></table>`;
 }
 
+// 簽名區:甲方在左、乙方在右,逐列左右對稱等高
+function buildSignBlock(d, isEng) {
+  const v = k => d[k] || "";
+  const rows = [
+    ["甲　方", v("partyA_name"), "乙　方", v("partyB_branchName")],
+    ["負責人", v("partyA_rep"), "負責人", v("partyB_rep")],
+    ["代理人", v("partyA_agent"), "代理人", v("partyB_agent")],
+    ["地　址", v("partyA_address"), "地　址", v("partyB_address")],
+    ["統一編號/身分證字號", v("partyA_id"), "統一編號", v("partyB_id")]
+  ];
+  if (isEng) {
+    rows.push(["簽約代表(簽字)", "", "專案設計師", v("partyB_designer")]);
+    rows.push(["工程驗收代表", "", "", ""]);
+  }
+  rows.push(["電　話", v("partyA_phone"), "電　話", v("partyB_phone")]);
+  rows.push(["傳　真", v("partyA_fax"), "傳　真", v("partyB_fax")]);
+  if (isEng) {
+    rows.push(["行動電話", v("partyA_mobile"), "行動電話", ""]);
+  } else {
+    rows.push(["行動電話", v("partyA_mobile"), "專案設計師", v("partyB_designer")]);
+  }
+  rows.push(["E-mail", v("partyA_email"), "E-mail", v("partyB_email")]);
+  const trs = rows.map(r => {
+    const cell = (label, val) => label === "" && val === ""
+      ? '<td class="sl"></td><td class="sv-empty"></td>'
+      : `<td class="sl">${label}：</td><td class="sv">${val}</td>`;
+    return `<tr>${cell(r[0], r[1])}${cell(r[2], r[3])}</tr>`;
+  }).join("");
+  return `<table class="sign-table"><tbody>${trs}</tbody></table>`;
+}
+
 // ---------------- 分頁 ----------------
 // 依區塊實際高度自動分頁：每頁盡量填滿，避免半頁空白。
 
@@ -398,13 +429,10 @@ function render() {
     totalPreviewEl.textContent = `目前總計費用：新台幣 ${fmtMoney(totalFee)} 元整` + (d.design_totalFeeOverride ? "（手動覆蓋）" : "（＝每坪×坪數）");
   }
 
-  d.SIGN_EXTRA_A = currentType === "engineering"
-    ? '<div>簽約代表(簽字)：<span class="fill"></span></div><div>工程驗收代表：<span class="fill"></span></div>'
-    : "";
   d.PAYMENT_TABLE = buildPaymentTable(d.eng_totalAmount, engRows);
   d.APPENDIX_LIST = buildAppendixList(d);
   d.STAGE_TABLE = buildStageTable(variant, totalFee, pcts);
-  d.SIGN_BLOCK = fillTemplate(SIGN_BLOCK_TEMPLATE, d);
+  d.SIGN_BLOCK = buildSignBlock(d, currentType === "engineering");
   d.coverTitleChars = cfg.titleText.split("").join("<br>");
   d.coverBadge = cfg.badge;
   d.BRANCH_LIST = buildBranchList(cfg.branches, d.branch);
@@ -435,6 +463,8 @@ body{font-family:"SimSun","宋体","NSimSun","PMingLiU","新細明體",serif;fon
 .page{page-break-after:always;}
 table{border-collapse:collapse;width:100%;page-break-inside:avoid;}
 tr{page-break-inside:avoid;}
+.payment-info-box{page-break-inside:avoid;border:1px solid #999;padding:8pt 12pt;margin:8pt 0;}
+.sign-area{page-break-inside:avoid;}
 td,th{border:1px solid #999;padding:5px 7px;font-size:12pt;vertical-align:top;}
 .doc-title{text-align:center;font-size:18pt;font-weight:bold;margin-bottom:16pt;letter-spacing:6px;}
 .cover-title{text-align:center;font-size:20pt;font-weight:bold;letter-spacing:4px;}

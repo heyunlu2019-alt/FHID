@@ -207,12 +207,15 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .payment-info-box .payment-info-title { font-weight: bold; color: var(--ink); margin-bottom: 6px; }
 
 .sign-area { margin-top: 10px; }
+/* 簽名區:逐列左右對稱,列距加大預留用印大小章位置 */
 .sign-table { margin-top: 24px; }
-.sign-table td { vertical-align: top; padding: 6px 14px 6px 0; font-size: 18px; line-height: 1.75; }
-/* 簽名欄各列加大間距，預留用印大小章位置 */
-.sign-col div { border-bottom: 1px dotted #ccc; padding: 18px 0; }
+.sign-table td { vertical-align: bottom; font-size: 18px; line-height: 1.75; padding: 18px 0 4px; }
+.sign-table .sl { white-space: nowrap; padding-right: 6px; width: 1%; }
+.sign-table .sv { border-bottom: 1px dotted #999; min-width: 8em; }
+.sign-table .sv-empty { border-bottom: none; }
+.sign-table td:nth-child(3) { padding-left: 26px; }
 /* 第一列(甲方/乙方名稱)下方預留公司大章用印空間 */
-.sign-col div:first-child { padding-bottom: 48px; }
+.sign-table tr:first-child td { padding-bottom: 52px; }
 
 .doc-footer { text-align: center; margin-top: 30px; font-size: 18px; letter-spacing: 2px; }
 
