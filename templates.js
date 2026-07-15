@@ -70,6 +70,9 @@ const TEMPLATE_ENGINEERING = `
 <!--PAGEBREAK-->
 <p><b>七、付款方式</b></p>
 {{PAYMENT_TABLE}}
+<p>（五）追加減工程款：<br>
+　1、第一期變更設計追加減工程款應併入(第三期工程款)請領。<br>
+　2、第二期變更設計追加減工程款應併入(第四期工程款)請領。</p>
 <p>（六）各工程項目之物權於甲方貨款支付前，仍屬乙方所有，於全部貨款付清後始移轉歸屬甲方所有。</p>
 <div class="payment-info-box">
   <div class="payment-info-title">（七）匯款資訊</div>
@@ -148,7 +151,7 @@ function buildDesignTemplate(variant) {
 <p>立約目的　茲因甲方為 <span class="fill">{{design_caseName}}</span> 設計案，於民國 {{design_caseDate}}，特委由乙方負責室內裝修設計事宜，經雙方協議訂立委任契約條件如下：</p>
 
 <p><b>第一條　服務的內容</b><br>
-（一）乙方將進行室內規劃、設計構想、色彩搭配、傢俱建議、燈光設計、燈具選擇、衛浴設備之周遭設計配合、材料和裝飾說明，${isCustom ? "為業主" : "依附件二「設計階段進度表」為甲方"}提供一套完整的設計、成套之室內設計施工圖紙/規格說明(以下稱"室內設計基本服務")。<br>
+（一）乙方將進行室內規劃、設計構想、色彩搭配、傢俱建議、燈光設計、燈具選擇、衛浴設備之周遭設計配合、${isCustom ? "用料" : "材料"}和裝飾說明，${isCustom ? "為業主" : "依附件二「設計階段進度表」為甲方"}提供一套完整的設計、成套之室內設計施工圖紙/規格說明(以下稱"室內設計基本服務")。<br>
 （二）乙方將分成四個階段向${isCustom ? "業主" : "甲方"}提供室內設計基本服務，各階段的細節在本契約之"附件一"[室內設計基本服務階段]中加以描述。<br>
 （三）合約除外服務內容　下述設計服務應從室內設計基本服務中排除${isCustom ? "(諮詢除外)" : ""}；<br>
 　1. 專業性設備設計及說明(即視聽設備、資訊設備、監控系統等及其他類似設備之設計)；<br>
@@ -160,10 +163,13 @@ function buildDesignTemplate(variant) {
 　※號表示如果甲方有此要求，並在甲乙雙方就該服務完成時間、服務費和其他相關問題達成一致意見並另以條文書面增訂於本契約中或另以契約書面規範後，乙方將以單獨、額外、部分或整體服務形式為這些專案提供設計服務。</p>
 
 <p><b>第二條　設計費付款說明</b><br>
-（一）設計規劃費：（室內）每坪 <span class="fill">{{design_pricePerPing}}</span> 元整，計 <span class="fill">{{design_ping}}</span> 坪，總計費用：新台幣 <span class="fill">{{design_totalFee_capital}}</span> 元整（含稅）。<br>
-（二）乙方提供本服務"附件一"中所描述的第一至第三階段工作所收取的設計費，[第四階段工程係配合工地施作進行時，協助施工班圖說疑義解釋及確保設計原創，不列入計費項目]。<br>
-（三）合約簽訂之費用為總價${isCustom ? "30" : "60"}%，即為新台幣 <span class="fill">{{design_signFee}}</span> 元整(含稅)，應於雙方合約確認簽定後開始即期支付。${isCustom ? "其餘部份的設計費用應當由乙方依據下表所列階段完工比例按期收取：" : ""}</p>
+（一）設計規劃費：（室內）每坪 <span class="fill">{{design_pricePerPing}}</span> 元整，計 <span class="fill">{{design_ping}}</span> 坪，總計費用：新台幣 <span class="fill">{{design_totalFee_capital}}</span> 元整（含稅）${isCustom ? "（以下稱\"設計費\"）" : ""}。<br>
+（二）乙方提供本服務"附件一"中所描述的第一至第三階段工作所收取的設計費，[第四階段工程係配合工地施作進行時，協助施工${isCustom ? "工班" : "班"}圖說疑義解釋及確保設計原創，不列入計費項目]。<br>
+（三）合約簽訂之費用為總價{{design_signPct}}%，即為新台幣 <span class="fill">{{design_signFee}}</span> 元整(含稅)，應於雙方合約確認簽定後開始即期支付。${isCustom ? "其餘部份的設計費用應當由乙方依據下表所列階段完工比例按期收取：" : ""}</p>
 {{STAGE_TABLE}}
+<p>（四）前項費用包括下列雜項成本：與本設計項目相關的電話、傳真、郵資、CAD繪圖及複製（提供一套A3圖紙），以及一切相關本工程的雜項開支。<br>
+（五）本條第三項費用不包括下列雜項成本：製作與本工程項目相關的專業照片、空間3D模擬圖、特殊材料及樣品、模型。<br>
+（六）經雙方合議設計階段完成，乙方應於每階段完成後配合甲方之請款期間進行請款，款項為現金票或七日內之期票。但至遲應於乙方各階段之工作後七日內支付。</p>
 <div class="payment-info-box">
   <div class="payment-info-title">匯款資訊</div>
   銀行：<span class="fill">{{design_bank}}</span>　　戶名：<span class="fill">{{design_bankAccountName}}</span><br>
@@ -252,6 +258,7 @@ const SIGN_BLOCK_TEMPLATE = `
     <div>代理人：<span class="fill">{{partyA_agent}}</span></div>
     <div>地　址：<span class="fill">{{partyA_address}}</span></div>
     <div>統一編號/身分證字號：<span class="fill">{{partyA_id}}</span></div>
+    {{SIGN_EXTRA_A}}
     <div>電　話：<span class="fill">{{partyA_phone}}</span></div>
     <div>傳　真：<span class="fill">{{partyA_fax}}</span></div>
     <div>行動電話：<span class="fill">{{partyA_mobile}}</span></div>

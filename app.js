@@ -197,11 +197,12 @@ function buildPaymentTable(totalAmount, rows) {
 const STAGE_DEFS = {
   general: [
     { name: "簽約款", items: ["設計合約書簽定"] },
-    { name: "第二階段", items: ["初步規劃","平面配置圖","與甲方討論後設計定案（設計構想、色彩搭配、取材風格）","隔間放樣圖","地板配置圖","天花板配置圖","空調配置圖","天花板燈具及開關配置圖","迴路配置圖","水電配置圖"] },
-    { name: "第三階段", items: ["各向立面圖","剖面施工圖","工程預算書","建材選樣"] }
+    { name: "第一階段", items: ["初步規劃","平面配置圖","與甲方討論後設計定案（設計構想、色彩搭配、取材風格）","隔間放樣圖","地板配置圖","天花板配置圖","空調配置圖","天花板燈具及開關配置圖","迴路配置圖","水電配置圖"] },
+    { name: "第二階段", items: ["各向立面圖","剖面施工圖","工程預算書","建材選樣"] },
+    { name: "尾款", items: ["全套設計圖說交付"] }
   ],
   custom: [
-    { name: "簽約款", items: ["設計合約書簽定"] },
+    { name: "簽約訂金費用", items: ["設計合約書簽定"] },
     { name: "第一階段", items: ["初步規劃及平面圖","與甲方討論後設計定案（設計構想、色彩搭配、取材風格）","隔間放樣圖","水電配置圖","天花板燈具及開關配置圖","地板配置圖","協助客戶變更選材"] },
     { name: "第二階段", items: ["基本Sketchup 3D模型","天花板及空調配置圖","迴路配置圖","建材樣品板","重點立面及剖面"] },
     { name: "第三階段", items: ["立面施工圖","細部及剖面設計圖","編訂工程預算書"] }
@@ -209,7 +210,7 @@ const STAGE_DEFS = {
 };
 
 const STAGE_DEFAULT_PCT = {
-  general: [60, 30, 10],
+  general: [30, 30, 30, 10],
   custom: [30, 30, 30, 10]
 };
 
@@ -369,6 +370,7 @@ function render() {
   const pctInputs = [d.design_pct1, d.design_pct2, d.design_pct3, d.design_pct4];
   const pcts = STAGE_DEFAULT_PCT[variant].map((def, i) => (pctInputs[i] === undefined || pctInputs[i] === "") ? def : Number(pctInputs[i]));
   d.design_signFee = totalFee ? fmtMoney(totalFee * (pcts[0] / 100)) : "";
+  d.design_signPct = pcts[0];
   d.design_caseDate = d.design_caseDate || toRocFullDate(d.signDate) || "　　年　　月　　日";
   d.design_signDate_roc = "中華民國" + (toRocFullDate(d.signDate) || "　　年　　月　　日");
   d.cover_date = toRocFullDate(d.signDate) || "";
@@ -384,6 +386,9 @@ function render() {
     totalPreviewEl.textContent = `目前總計費用：新台幣 ${fmtMoney(totalFee)} 元整` + (d.design_totalFeeOverride ? "（手動覆蓋）" : "（＝每坪×坪數）");
   }
 
+  d.SIGN_EXTRA_A = currentType === "engineering"
+    ? '<div>簽約代表(簽字)：<span class="fill"></span></div><div>工程驗收代表：<span class="fill"></span></div>'
+    : "";
   d.PAYMENT_TABLE = buildPaymentTable(d.eng_totalAmount, engRows);
   d.APPENDIX_LIST = buildAppendixList(d);
   d.STAGE_TABLE = buildStageTable(variant, totalFee, pcts);
@@ -455,7 +460,7 @@ function switchType(type) {
     setVal("design_pct2", defaults[1]);
     setVal("design_pct3", defaults[2]);
     setVal("design_pct4", defaults[3] ?? "");
-    document.getElementById("pct4Wrapper").style.display = (variant === "custom") ? "" : "none";
+    document.getElementById("pct4Wrapper").style.display = "";
   }
 
   render();
