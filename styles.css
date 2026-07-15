@@ -178,6 +178,8 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 /* 大項目（一、二、三…／第X條）標題段落：與前段拉開距離，段落層次更清楚 */
 .contract-page p:has(> b:first-child) { margin-top: 26px; }
 .contract-page .doc-title + p, .contract-page p:first-child { margin-top: 10px; }
+/* 條款內的編號小項（1. 2. 3.…）：屬同一項目的列舉，行距收緊 */
+.contract-page p.sub-item { margin: 2px 0; }
 .party-table, .sign-table, .payment-table, .stage-table, .appendix-table {
   width: 100%;
   border-collapse: collapse;
@@ -207,7 +209,8 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .sign-area { margin-top: 10px; }
 .sign-table { margin-top: 24px; }
 .sign-table td { vertical-align: top; padding: 6px 14px 6px 0; font-size: 18px; line-height: 1.75; }
-.sign-col div { border-bottom: 1px dotted #ccc; padding: 2px 0; }
+/* 簽名欄各列加大間距，預留用印大小章位置 */
+.sign-col div { border-bottom: 1px dotted #ccc; padding: 14px 0; }
 
 .doc-footer { text-align: center; margin-top: 30px; font-size: 18px; letter-spacing: 2px; }
 

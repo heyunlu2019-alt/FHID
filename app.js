@@ -257,8 +257,8 @@ function pxPerMm() {
 function splitClauseItems(html) {
   return html
     .replace(/<br>\s*(?=（[一二三四五六七八九十]{1,3}）)/g, "</p><p>")
-    .replace(/<br>\s*(?=　[\(（]?\d)/g, "</p><p>")
-    .replace(/<br>\s*(?=\d\.\d　)/g, "</p><p>");
+    .replace(/<br>\s*(?=　[\(（]?\d)/g, '</p><p class="sub-item">')
+    .replace(/<br>\s*(?=\d\.\d　)/g, '</p><p class="sub-item">');
 }
 
 function paginate(html, docCode) {
