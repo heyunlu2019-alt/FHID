@@ -175,7 +175,7 @@ function buildDesignTemplate(variant) {
   銀行：<span class="fill">{{design_bank}}</span>　　戶名：<span class="fill">{{design_bankAccountName}}</span><br>
   帳號：<span class="fill">{{design_bankAccount}}</span>
 </div>
-${!isCustom ? `<p>（七）本案工程若甲方委由乙方統包承攬施作，乙方本於友好情誼，設計費將打九折計價，折讓費將由工程價金中逕行扣除。</p>` : ""}
+${!isCustom ? `<p>（七）本案工程若甲方委由乙方統包承攬施作，乙方本於友好情誼，設計費將打{{design_discountZhe}}折（即原設計費之{{design_discountPct}}%）計價，折讓費將由工程價金中逕行扣除。</p>` : ""}
 <!--PAGEBREAK-->
 <p><b>第三條　變更設計</b><br>
 （一）乙方應配合甲方之需求於雙方協議之期限內，依本設計案作適當變更。<br>

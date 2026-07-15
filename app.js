@@ -96,6 +96,16 @@ function fmtMoney(n) {
   return Math.round(n).toLocaleString("zh-TW");
 }
 
+// 折扣百分比 → 中文「折」數：90→九、85→八五、95→九五
+function pctToZheText(p) {
+  p = Math.round(Number(p) || 90);
+  if (p >= 100) return "十";
+  if (p <= 0) return "";
+  const cn = ["零","一","二","三","四","五","六","七","八","九"];
+  const tens = Math.floor(p / 10), ones = p % 10;
+  return (tens ? cn[tens] : "") + (ones ? cn[ones] : "");
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -371,6 +381,8 @@ function render() {
   const pcts = STAGE_DEFAULT_PCT[variant].map((def, i) => (pctInputs[i] === undefined || pctInputs[i] === "") ? def : Number(pctInputs[i]));
   d.design_signFee = totalFee ? fmtMoney(totalFee * (pcts[0] / 100)) : "";
   d.design_signPct = pcts[0];
+  d.design_discountPct = Math.round(Number(d.design_discountPct) || 90);
+  d.design_discountZhe = pctToZheText(d.design_discountPct);
   d.design_caseDate = d.design_caseDate || toRocFullDate(d.signDate) || "　　年　　月　　日";
   d.design_signDate_roc = "中華民國" + (toRocFullDate(d.signDate) || "　　年　　月　　日");
   d.cover_date = toRocFullDate(d.signDate) || "";
