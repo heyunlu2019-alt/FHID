@@ -187,8 +187,8 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .party-table .label { font-weight: bold; white-space: nowrap; }
 .party-table .indent { padding-left: 16px; }
 
-.payment-table td, .stage-table td, .appendix-table td { border: 1px solid #999; padding: 7px 9px; font-size: 15px; vertical-align: top; line-height: 1.75; }
-.payment-table th, .stage-table th { border: 1px solid #999; padding: 7px 9px; background: #faf3d1; font-size: 15px; }
+.payment-table td, .stage-table td, .appendix-table td { border: 1px solid #999; padding: 7px 9px; font-size: 18px; vertical-align: top; line-height: 1.75; }
+.payment-table th, .stage-table th { border: 1px solid #999; padding: 7px 9px; background: #faf3d1; font-size: 18px; }
 .payment-table .cell-period, .stage-table .cell-period { white-space: nowrap; }
 .payment-table .cell-pct, .stage-table .cell-pct { white-space: nowrap; text-align: center; }
 .payment-table .cell-amount, .stage-table .cell-amount { white-space: nowrap; text-align: right; }
@@ -199,20 +199,20 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
   border-radius: 6px;
   padding: 12px 16px;
   margin: 12px 0 16px;
-  font-size: 17px;
-  line-height: 1.9;
+  font-size: 18px;
+  line-height: 1.75;
 }
 .payment-info-box .payment-info-title { font-weight: bold; color: var(--ink); margin-bottom: 6px; }
 
 .sign-area { margin-top: 10px; }
 .sign-table { margin-top: 24px; }
-.sign-table td { vertical-align: top; padding: 6px 14px 6px 0; font-size: 16px; line-height: 2; }
+.sign-table td { vertical-align: top; padding: 6px 14px 6px 0; font-size: 18px; line-height: 1.75; }
 .sign-col div { border-bottom: 1px dotted #ccc; padding: 2px 0; }
 
-.doc-footer { text-align: center; margin-top: 30px; font-size: 16px; letter-spacing: 2px; }
+.doc-footer { text-align: center; margin-top: 30px; font-size: 18px; letter-spacing: 2px; }
 
-/* 附件一：整塊不跨頁，字級略縮讓四個階段集中在同一頁 */
-.appendix-fixed { border-top: 1px dashed #aaa; margin-top: 18px; padding-top: 8px; font-size: 15px; line-height: 1.7; }
+/* 附件一：整塊不跨頁，與內文同字級 */
+.appendix-fixed { border-top: 1px dashed #aaa; margin-top: 18px; padding-top: 8px; }
 .appendix-fixed p { margin: 7px 0; }
 .contract-page .appendix-fixed p:has(> b:first-child) { margin-top: 13px; }
 

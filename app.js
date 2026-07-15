@@ -423,7 +423,7 @@ body{font-family:"SimSun","宋体","NSimSun","PMingLiU","新細明體",serif;fon
 .page{page-break-after:always;}
 table{border-collapse:collapse;width:100%;page-break-inside:avoid;}
 tr{page-break-inside:avoid;}
-td,th{border:1px solid #999;padding:5px 7px;font-size:11.5pt;vertical-align:top;}
+td,th{border:1px solid #999;padding:5px 7px;font-size:12pt;vertical-align:top;}
 .doc-title{text-align:center;font-size:18pt;font-weight:bold;margin-bottom:16pt;letter-spacing:6px;}
 .cover-title{text-align:center;font-size:20pt;font-weight:bold;letter-spacing:4px;}
 .fill{border-bottom:1px solid #999;padding:0 4px;}
