@@ -136,8 +136,8 @@ function downloadBlob(blob, filename) {
 function buildBranchList(branches, selected) {
   return Object.keys(branches).map(name => {
     const sel = name === selected;
-    // 勾選用實體「✔」字元,列印關閉背景圖形時也印得出來
-    return `<span class="branch-chk${sel ? " selected" : ""}"><span class="box">${sel ? "✔" : ""}</span>${branches[name].short}</span>`;
+    // 選中的方格用實心「■」字元填滿,列印關閉背景圖形時也印得出來
+    return `<span class="branch-chk${sel ? " selected" : ""}"><span class="box">${sel ? "■" : ""}</span>${branches[name].short}</span>`;
   }).join("");
 }
 

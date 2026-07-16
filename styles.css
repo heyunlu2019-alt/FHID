@@ -169,8 +169,8 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .branch-chk { display: inline-block; }
 .branch-chk .box {
   display: inline-block; width: 11px; height: 11px; border: 1px solid #333;
-  margin-right: 3px; vertical-align: middle;
-  font-size: 9px; line-height: 11px; text-align: center; color: #000; font-weight: bold;
+  margin-right: 3px; vertical-align: middle; overflow: hidden;
+  font-size: 12px; line-height: 9px; text-align: center; color: var(--gold-dark);
 }
 .branch-chk.selected .box { background: var(--gold); border-color: var(--gold-dark); }
 
