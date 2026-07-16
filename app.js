@@ -567,25 +567,143 @@ function buildFileName(ext) {
   return `${cfg.label}_${partyA}_${today}.${ext}`;
 }
 
+// Word 匯出:Word 不支援網頁預覽用的 flex/固定欄寬等 CSS,
+// 這裡把每一頁轉換成 Word 友善結構(行內樣式+表格),格式才不會跑掉。
 const WORD_EXPORT_CSS = `
-body{font-family:"SimSun","宋体","NSimSun","PMingLiU","新細明體",serif;font-size:12pt;line-height:1.9;}
-.page{page-break-after:always;}
-table{border-collapse:collapse;width:100%;page-break-inside:avoid;}
-tr{page-break-inside:avoid;}
-.payment-info-box{page-break-inside:avoid;border:1px solid #999;padding:8pt 12pt;margin:8pt 0;}
-.sign-area{page-break-inside:avoid;}
-td,th{border:1px solid #999;padding:5px 7px;font-size:12pt;vertical-align:top;}
-.doc-title{text-align:center;font-size:18pt;font-weight:bold;margin-bottom:16pt;letter-spacing:6px;}
-.cover-title{text-align:center;font-size:20pt;font-weight:bold;letter-spacing:4px;}
-.fill{border-bottom:1px solid #999;padding:0 4px;}
-p{margin:6pt 0;text-align:justify;}
-.doc-footer{text-align:center;margin-top:20pt;}
+body{font-family:"SimSun","宋体","NSimSun","PMingLiU","新細明體",serif;font-size:12.5pt;line-height:1.7;}
+p{margin:5pt 0;text-align:justify;}
+.sub-item{margin:1pt 0;}
+.doc-title{text-align:center;font-size:18pt;font-weight:bold;letter-spacing:6pt;margin:0 0 10pt;}
 `;
 
-function exportWord() {
-  const previewHtml = document.getElementById("previewRoot").innerHTML;
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${WORD_EXPORT_CSS}</style></head><body>${previewHtml}</body></html>`;
-  const blob = htmlDocx.asBlob(fullHtml);
+function transformPageForWord(pg, logoData) {
+  // 去除為列印勻版加上的行內邊距(Word 自行分頁,不需要)
+  pg.querySelectorAll("[style]").forEach(el => { el.style.marginTop = ""; });
+
+  // 封面:LOGO+欄位列(flex)改成表格
+  const fieldsRow = pg.querySelector(".cover-fields-row");
+  if (fieldsRow) {
+    const logo = logoData ? `<img src="${logoData}" width="130">` : "";
+    const fields = pg.querySelector(".cover-fields");
+    fieldsRow.outerHTML = `<table width="100%" style="border-collapse:collapse"><tr>` +
+      `<td style="border:none;vertical-align:bottom">${logo}</td>` +
+      `<td style="border:none;vertical-align:bottom;width:58%">${fields ? fields.innerHTML : ""}</td></tr></table>`;
+  }
+  const spacer = pg.querySelector(".cover-spacer");
+  if (spacer) spacer.outerHTML = `<div style="height:65mm">&nbsp;</div>`;
+  const title = pg.querySelector(".cover-title");
+  if (title) title.setAttribute("style", "text-align:center;font-size:20pt;letter-spacing:4pt;margin-top:30mm");
+  const badge = pg.querySelector(".cover-badge");
+  if (badge) badge.setAttribute("style", "text-align:center;color:#b8960c;font-weight:bold;font-size:10pt");
+  pg.querySelectorAll(".cover-row").forEach(r => r.setAttribute("style", "font-size:11pt;margin:3pt 0"));
+  const brand = pg.querySelector(".cover-brand-name");
+  if (brand) brand.setAttribute("style", "font-size:13pt;letter-spacing:2pt");
+  const branches = pg.querySelector(".cover-branches");
+  if (branches) {
+    branches.setAttribute("style", "font-size:9pt");
+    branches.querySelectorAll(".branch-chk").forEach(chk => {
+      const box = chk.querySelector(".box");
+      const sel = chk.classList.contains("selected");
+      if (box) box.outerHTML = sel ? "■" : "□";
+      chk.insertAdjacentText("beforeend", "　");
+    });
+  }
+  const footBar = pg.querySelector(".cover-footer-bar");
+  if (footBar) {
+    const cells = Array.from(footBar.children).map(d => d.textContent);
+    let rowsHtml = "";
+    for (let i = 0; i < cells.length; i += 2) {
+      rowsHtml += `<tr><td style="border:none;font-size:9pt">${cells[i] || ""}</td>` +
+        `<td style="border:none;font-size:9pt;text-align:right">${cells[i + 1] || ""}</td></tr>`;
+    }
+    footBar.outerHTML = `<table width="100%" style="border-collapse:collapse">${rowsHtml}</table>`;
+  }
+
+  // 封底
+  if (pg.classList.contains("cover-back-page")) {
+    pg.querySelectorAll(".branch-block, .branch-email").forEach(b =>
+      b.setAttribute("style", "font-size:9pt;margin-bottom:5pt"));
+  }
+
+  // 匯款資訊框:div 邊框 Word 支援差,改為單格表格
+  pg.querySelectorAll(".payment-info-box").forEach(box => {
+    box.outerHTML = `<table width="100%" style="border-collapse:collapse;margin:6pt 0"><tr>` +
+      `<td style="border:1px solid #998a2e;background:#fffdf3;padding:5pt 9pt;font-size:11.5pt">${box.innerHTML}</td></tr></table>`;
+  });
+
+  // 付款/階段/附件表格:邊框與底色全部行內化
+  pg.querySelectorAll(".payment-table, .stage-table, .appendix-table").forEach(tb => {
+    tb.setAttribute("width", "100%");
+    tb.setAttribute("style", "border-collapse:collapse;margin:6pt 0");
+    tb.querySelectorAll("td, th").forEach(c => {
+      const head = c.tagName === "TH" ? "background:#faf3d1;" : "";
+      c.setAttribute("style", `border:1px solid #999;padding:2pt 5pt;font-size:11pt;vertical-align:top;${head}`);
+    });
+  });
+
+  // 立約人表:無框
+  pg.querySelectorAll(".party-table").forEach(tb => {
+    tb.setAttribute("width", "100%");
+    tb.querySelectorAll("td").forEach(c => c.setAttribute("style", "border:none;padding:1pt 3pt"));
+  });
+
+  // 簽名表:甲乙各半欄寬、值欄底線、列高預留用印
+  pg.querySelectorAll(".sign-table").forEach(tb => {
+    tb.setAttribute("width", "100%");
+    tb.setAttribute("style", "border-collapse:collapse;margin-top:14pt");
+    const widths = ["27%", "23%", "17%", "33%"];
+    Array.from(tb.rows).forEach((row, ri) => {
+      Array.from(row.cells).forEach((c, ci) => {
+        const underline = c.classList.contains("sv") ? "border-bottom:1px dotted #999;" : "";
+        const rowH = ri === 0 ? "height:1.5cm;" : "height:0.9cm;";
+        c.setAttribute("style",
+          `width:${widths[ci] || "auto"};border:none;${underline}${rowH}vertical-align:bottom;font-size:10.5pt;padding:2pt 4pt 1pt 0`);
+      });
+    });
+  });
+
+  // 填寫欄位:底線;空白的放全形空格,客戶可直接在 Word 填寫
+  pg.querySelectorAll(".fill").forEach(f => {
+    if (!f.textContent.trim()) f.textContent = "　　　　　";
+    f.setAttribute("style", "text-decoration:underline");
+  });
+
+  pg.querySelectorAll(".doc-footer").forEach(d =>
+    d.setAttribute("style", "text-align:center;margin-top:28pt;letter-spacing:3pt"));
+  pg.querySelectorAll(".appendix-fixed").forEach(d =>
+    d.setAttribute("style", "border-top:1px dashed #aaa;padding-top:6pt"));
+}
+
+function buildWordHtml(logoData) {
+  const root = document.getElementById("previewRoot").cloneNode(true);
+  root.querySelectorAll(".page-footer").forEach(el => el.remove());
+  const pages = Array.from(root.querySelectorAll("section.page"));
+  pages.forEach(pg => transformPageForWord(pg, logoData));
+  const body = pages.map((pg, i) =>
+    `<div${i < pages.length - 1 ? ' style="page-break-after:always"' : ""}>${pg.innerHTML}</div>`
+  ).join("\n");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${WORD_EXPORT_CSS}</style></head><body>${body}</body></html>`;
+}
+
+async function getLogoDataUrl() {
+  if (typeof LOGO_DATA_URI !== "undefined") return LOGO_DATA_URI; // 內建 base64,file:// 也可用
+  try {
+    const resp = await fetch("assets/logo.png");
+    const blob = await resp.blob();
+    return await new Promise(res => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => res(null);
+      r.readAsDataURL(blob);
+    });
+  } catch (e) { return null; }
+}
+
+async function exportWord() {
+  const logoData = await getLogoDataUrl();
+  const fullHtml = buildWordHtml(logoData);
+  // 頁邊距與列印版一致:上下18mm、左右16mm(單位twip)
+  const blob = htmlDocx.asBlob(fullHtml, { margins: { top: 1021, right: 907, bottom: 1021, left: 907 } });
   downloadBlob(blob, buildFileName("docx"));
 }
 
