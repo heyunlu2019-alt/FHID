@@ -511,7 +511,7 @@ function render() {
   const variant = currentType === "design_custom" ? "custom" : "general";
   const calcFee = (Number(d.design_pricePerPing) || 0) * (Number(d.design_ping) || 0);
   const totalFee = d.design_totalFeeOverride ? Number(d.design_totalFeeOverride) : calcFee;
-  d.design_totalFee_capital = numberToChineseCapital(totalFee);
+  d.design_totalFee_fmt = totalFee ? fmtMoney(totalFee) : "";
 
   const pctInputs = [d.design_pct1, d.design_pct2, d.design_pct3, d.design_pct4];
   const pcts = STAGE_DEFAULT_PCT[variant].map((def, i) => (pctInputs[i] === undefined || pctInputs[i] === "") ? def : Number(pctInputs[i]));
