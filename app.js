@@ -522,7 +522,8 @@ function render() {
   d.design_caseDate = d.design_caseDate || toRocFullDate(d.signDate) || "　　年　　月　　日";
   d.design_signDate_roc = toChineseSignDate(d.signDate);
   d.signDate_zh = toChineseSignDate(d.signDate);
-  d.cover_date = toRocFullDate(d.signDate) || "";
+  // 封面日期用西元:2026 / 07 / 16
+  d.cover_date = d.signDate ? d.signDate.split("-").join(" / ") : "";
 
   const pctSum = pcts.reduce((a, b) => a + b, 0);
   const pctHintEl = document.getElementById("pctSumHint");
