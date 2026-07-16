@@ -168,9 +168,10 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .cover-footer-bar { margin-top: 6px; font-size: 11px; color: #333; display: grid; grid-template-columns: 1fr auto; gap: 2px 24px; }
 .cover-footer-bar div { white-space: nowrap; }
 
-.cover-back-page .branch-block { margin-bottom: 14px; font-size: 12px; }
+/* 封底:13個分公司區塊+E-mail 必須壓在一頁內(此頁為固定範本,不走自動分頁) */
+.cover-back-page .branch-block { margin-bottom: 8px; font-size: 12px; line-height: 1.5; }
 .cover-back-page .branch-name { font-weight: bold; }
-.cover-back-page .branch-email { margin-top: 20px; font-size: 12px; }
+.cover-back-page .branch-email { margin-top: 12px; font-size: 12px; line-height: 1.5; }
 
 .doc-title { text-align: center; font-size: 26px; letter-spacing: 6px; margin-bottom: 10px; }
 .contract-page { flex: 1; }
