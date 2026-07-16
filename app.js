@@ -31,10 +31,11 @@ function toLocalPhone(intl) {
 
 const PARTY_B_DEFAULT = { name: "成舍企業股份有限公司", rep: "詹美珠", id: "86320066", email: "fullhouseid@mail2000.com.tw", defaultBranch: "承德公司" };
 
+// version = 公司合約修訂版本(依原始Word檔案版次,勿隨意變動;僅錯字/排版修正不改版)
 const CONTRACT_TYPES = {
-  engineering: { label: "工程合約", branches: BRANCHES, partyB: PARTY_B_DEFAULT, titleText: "工程合約書", badge: "", template: TEMPLATE_ENGINEERING },
-  design_general: { label: "設計合約", branches: BRANCHES, partyB: PARTY_B_DEFAULT, titleText: "設計合約書", badge: "", template: TEMPLATE_DESIGN_GENERAL },
-  design_custom: { label: "客變專用合約", branches: BRANCHES, partyB: PARTY_B_DEFAULT, titleText: "設計合約書", badge: "（客變專用）", template: TEMPLATE_DESIGN_CUSTOM }
+  engineering: { label: "工程合約", version: "20260312", branches: BRANCHES, partyB: PARTY_B_DEFAULT, titleText: "工程合約書", badge: "", template: TEMPLATE_ENGINEERING },
+  design_general: { label: "設計合約", version: "20200723", branches: BRANCHES, partyB: PARTY_B_DEFAULT, titleText: "設計合約書", badge: "", template: TEMPLATE_DESIGN_GENERAL },
+  design_custom: { label: "客變專用合約", version: "20230830", branches: BRANCHES, partyB: PARTY_B_DEFAULT, titleText: "設計合約書", badge: "（客變專用）", template: TEMPLATE_DESIGN_CUSTOM }
 };
 
 let currentType = "engineering";
@@ -439,7 +440,7 @@ function render() {
   d.BRANCH_ADDRESS_LIST = buildBranchAddressList(cfg.branches);
   d.COVER_FOOTER = buildCoverFooter(cfg.branches, d.branch);
 
-  const docCode = new Date().toISOString().slice(0, 10).replace(/-/g, "") + cfg.label;
+  const docCode = cfg.version + "版" + cfg.label;
   const html =
     fillTemplate(COVER_TEMPLATE, d) +
     fillTemplate(COVER_BACK_TEMPLATE, d) +
