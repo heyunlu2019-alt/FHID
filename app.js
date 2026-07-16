@@ -433,6 +433,26 @@ function setVal(name, value) {
   if (el) el.value = value ?? "";
 }
 
+// 重複欄位雙向連動:填一處,其餘自動帶入(封面 ↔ 工程/設計內容 ↔ 乙方設計師)
+const SYNC_GROUPS = [
+  ["cover_projectName", "eng_projectName", "design_caseName"],
+  ["cover_siteAddress", "eng_projectLocation", "design_siteAddress"],
+  ["cover_designer", "partyB_designer"]
+];
+
+function syncLinkedFields(sourceName) {
+  for (const grp of SYNC_GROUPS) {
+    if (!grp.includes(sourceName)) continue;
+    const src = document.querySelector(`[name="${sourceName}"]`);
+    if (!src) continue;
+    grp.forEach(n => { if (n !== sourceName) setVal(n, src.value); });
+  }
+}
+
+function syncAllFromCover() {
+  SYNC_GROUPS.forEach(grp => syncLinkedFields(grp[0]));
+}
+
 function populateBranchSelect(type) {
   const cfg = CONTRACT_TYPES[type];
   const select = document.getElementById("branchSelect");
@@ -580,6 +600,7 @@ function switchType(type) {
   document.getElementById("fieldset_design").style.display = isEng ? "none" : "";
   populateBranchSelect(type);
   applyBranchDefaults(type, CONTRACT_TYPES[type].partyB.defaultBranch);
+  syncAllFromCover();
 
   if (type !== "engineering") {
     const variant = type === "design_custom" ? "custom" : "general";
@@ -604,6 +625,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("branchSelect").addEventListener("change", (e) => {
     applyBranchDefaults(currentType, e.target.value);
+    syncAllFromCover();
     render();
   });
 
@@ -618,7 +640,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   applyEngPreset("standard");
 
-  document.getElementById("contractForm").addEventListener("input", render);
+  document.getElementById("contractForm").addEventListener("input", (e) => {
+    if (e.target && e.target.name) syncLinkedFields(e.target.name);
+    render();
+  });
 
   document.getElementById("btnPrint").addEventListener("click", () => window.print());
   document.getElementById("btnWord").addEventListener("click", exportWord);
