@@ -304,42 +304,113 @@ function paginate(html, docCode) {
   measurer.innerHTML = html;
 
   const mm = pxPerMm();
-  const availHeight = (297 - 18 - 18) * mm - 62; // A4 高度 － 上下留白 － 頁尾（含列印誤差安全邊距）
+  const availHeight = (297 - 18 - 18) * mm - 52; // A4 高度 － 上下留白 － 頁尾（含列印誤差安全邊距）
 
   const blocks = Array.from(measurer.children).map(el => {
     const st = getComputedStyle(el);
     const mT = parseFloat(st.marginTop), mB = parseFloat(st.marginBottom);
     return {
-      html: el.outerHTML,
+      el, mT,
       h: el.offsetHeight + mT + mB,
-      isHeading: el.tagName === "P" && !!el.querySelector("b") && el.textContent.trim().length <= 16
+      isHeading: el.tagName === "P" && !!el.querySelector("b") && el.textContent.trim().length <= 16,
+      isSign: el.classList.contains("sign-area"),
+      isSpecial: el.classList.contains("sign-area") || el.classList.contains("appendix-fixed")
     };
   });
-  document.body.removeChild(measurer);
 
-  // 表格（及所有區塊）整塊不跨頁；條文標題不孤懸頁底
-  const pages = [];
-  let cur = [];
-  let curH = 0;
-  blocks.forEach((b, i) => {
-    const next = blocks[i + 1];
-    const groupH = (b.isHeading && next) ? b.h + next.h : b.h;
-    if (cur.length && curH + groupH > availHeight) {
-      pages.push(cur);
-      cur = [];
-      curH = 0;
+  // 依大項目分組:標題與其後內文為一組(同一件事盡量同頁)
+  const groups = [];
+  let g = null;
+  blocks.forEach(b => {
+    if (b.isHeading || b.isSpecial || !g || g.special) {
+      g = { blocks: [b], h: b.h, special: b.isSpecial, sign: b.isSign };
+      groups.push(g);
+    } else {
+      g.blocks.push(b);
+      g.h += b.h;
     }
-    cur.push(b.html);
-    curH += b.h;
   });
-  if (cur.length) pages.push(cur);
+
+  // 分頁規則:
+  // 1. 整組放得下 → 同頁
+  // 2. 放不下且本頁已夠滿(門檻) → 整組換頁(不拆開同一條款)
+  // 3. 其餘情況(組太大或本頁太空) → 組內拆分,但標題不孤懸頁底
+  const packPages = (threshold) => {
+    const pgs = [];
+    let cur = [], curH = 0;
+    const flush = () => { if (cur.length) { pgs.push({ blocks: cur, used: curH }); cur = []; curH = 0; } };
+    groups.forEach(grp => {
+      if (grp.sign) flush(); // 簽約區獨立成頁
+      if (curH + grp.h <= availHeight) {
+        cur.push(...grp.blocks); curH += grp.h;
+      } else if (grp.h <= availHeight && curH >= availHeight * threshold) {
+        flush();
+        cur.push(...grp.blocks); curH += grp.h;
+      } else {
+        grp.blocks.forEach((b, i) => {
+          const next = grp.blocks[i + 1];
+          const need = (b.isHeading && next) ? b.h + next.h : b.h;
+          if (cur.length && curH + need > availHeight) flush();
+          cur.push(b); curH += b.h;
+        });
+      }
+      if (grp.sign) flush();
+    });
+    flush();
+    return pgs;
+  };
+
+  // 嘗試多種門檻,選頁數最少、各頁最平均(最空頁面填滿度最高)的方案
+  let pages = null, bestKey = null;
+  [0.6, 0.7, 0.8, 0.9, 2].forEach(t => {
+    const pgs = packPages(t);
+    const normal = pgs.filter((p, i) => !p.blocks.some(b => b.isSign) && i !== pgs.length - 1);
+    const minFill = normal.length ? Math.min(...normal.map(p => p.used / availHeight)) : 1;
+    const key = [pgs.length, -minFill];
+    if (!pages || key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+      pages = pgs; bestKey = key;
+    }
+  });
+
+  // 垂直勻版:各頁剩餘空間平均分配到條款起始處,版面均勻不留大片空白
+  // (簽約頁除外:簽約表固定、日期壓底;最末頁不硬撐)
+  pages.forEach((pg, pi) => {
+    if (pg.blocks.some(b => b.isSign)) return;
+    let leftover = availHeight - pg.used;
+    if (leftover <= 0) return;
+    const isLast = pi === pages.length - 1;
+    // 第一層:分配到條款(大項目)起始處
+    const gapsA = pg.blocks.filter((b, i) => i > 0 && (b.isHeading || b.isSpecial));
+    if (gapsA.length) {
+      let quota = isLast ? Math.min(leftover, gapsA.length * 8) : leftover;
+      const extra = Math.min(Math.floor(quota / gapsA.length), 30);
+      if (extra > 0) {
+        gapsA.forEach(b => { b.el.style.marginTop = (b.mT + extra) + "px"; });
+        leftover -= extra * gapsA.length;
+      }
+    }
+    if (isLast) return;
+    // 第二層:仍有明顯剩餘時,平均分到一般段落之間(小幅,編號小項除外)
+    const gapsB = pg.blocks.filter((b, i) =>
+      i > 0 && !b.isHeading && !b.isSpecial && !b.el.classList.contains("sub-item"));
+    if (leftover > 60 && gapsB.length) {
+      const extra2 = Math.min(Math.floor(leftover / gapsB.length), 12);
+      if (extra2 > 0) gapsB.forEach(b => {
+        const cur = parseFloat(b.el.style.marginTop) || b.mT;
+        b.el.style.marginTop = (cur + extra2) + "px";
+      });
+    }
+  });
 
   const total = pages.length;
-  return pages.map((els, i) =>
-    `<section class="page contract-page">${els.join("")}` +
-    `<div class="page-footer"><span>第 ${i + 1} 頁，共 ${total} 頁</span><span>${docCode}</span></div>` +
-    `</section>`
-  ).join("");
+  const out = pages.map((pg, i) => {
+    const cls = pg.blocks.some(b => b.isSign) ? "page contract-page sign-page" : "page contract-page";
+    return `<section class="${cls}">${pg.blocks.map(b => b.el.outerHTML).join("")}` +
+      `<div class="page-footer"><span>第 ${i + 1} 頁，共 ${total} 頁</span><span>${docCode}</span></div>` +
+      `</section>`;
+  }).join("");
+  document.body.removeChild(measurer);
+  return out;
 }
 
 // ---------------- 表單 <-> 分公司預設值 ----------------

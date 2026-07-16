@@ -172,12 +172,13 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .cover-back-page .branch-name { font-weight: bold; }
 .cover-back-page .branch-email { margin-top: 20px; font-size: 12px; }
 
-.doc-title { text-align: center; font-size: 26px; letter-spacing: 6px; margin-bottom: 20px; }
+.doc-title { text-align: center; font-size: 26px; letter-spacing: 6px; margin-bottom: 10px; }
 .contract-page { flex: 1; }
-.contract-page p { margin: 10px 0; text-align: justify; }
-/* 大項目（一、二、三…／第X條）標題段落：與前段拉開距離，段落層次更清楚 */
-.contract-page p:has(> b:first-child) { margin-top: 26px; }
-.contract-page .doc-title + p, .contract-page p:first-child { margin-top: 10px; }
+.contract-page p { margin: 8px 0; text-align: justify; }
+/* 大項目（一、二、三…／第X條）標題段落：與前段拉開距離，段落層次更清楚
+   (實際間距由分頁勻版程式依各頁剩餘空間再加大,使版面均勻) */
+.contract-page p:has(> b:first-child) { margin-top: 20px; }
+.contract-page .doc-title + p, .contract-page p:first-child { margin-top: 8px; }
 /* 條款內的編號小項（1. 2. 3.…）：屬同一項目的列舉，行距收緊 */
 .contract-page p.sub-item { margin: 2px 0; }
 .party-table, .sign-table, .payment-table, .stage-table, .appendix-table {
@@ -185,12 +186,12 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
   border-collapse: collapse;
   margin: 8px 0 12px;
 }
-.party-table td { padding: 3px 4px; font-size: 18px; }
+.party-table td { padding: 2px 4px; font-size: 18px; }
 .party-table .label { font-weight: bold; white-space: nowrap; }
 .party-table .indent { padding-left: 16px; }
 
-.payment-table td, .stage-table td, .appendix-table td { border: 1px solid #999; padding: 7px 9px; font-size: 18px; vertical-align: top; line-height: 1.75; }
-.payment-table th, .stage-table th { border: 1px solid #999; padding: 7px 9px; background: #faf3d1; font-size: 18px; }
+.payment-table td, .stage-table td, .appendix-table td { border: 1px solid #999; padding: 2px 8px; font-size: 18px; vertical-align: top; line-height: 1.45; }
+.payment-table th, .stage-table th { border: 1px solid #999; padding: 4px 8px; background: #faf3d1; font-size: 18px; }
 .payment-table .cell-period, .stage-table .cell-period { white-space: nowrap; }
 .payment-table .cell-pct, .stage-table .cell-pct { white-space: nowrap; text-align: center; }
 .payment-table .cell-amount, .stage-table .cell-amount { white-space: nowrap; text-align: right; }
@@ -199,23 +200,29 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
   border: 1px solid var(--gold-dark);
   background: #fffdf3;
   border-radius: 6px;
-  padding: 12px 16px;
-  margin: 12px 0 16px;
+  padding: 8px 14px;
+  margin: 8px 0 10px;
   font-size: 18px;
   line-height: 1.75;
 }
 .payment-info-box .payment-info-title { font-weight: bold; color: var(--ink); margin-bottom: 6px; }
 
 .sign-area { margin-top: 10px; }
-/* 簽名區:逐列左右對稱,列距加大預留用印大小章位置 */
-.sign-table { margin-top: 24px; }
-.sign-table td { vertical-align: bottom; font-size: 18px; line-height: 1.75; padding: 18px 0 4px; }
-.sign-table .sl { white-space: nowrap; padding-right: 6px; width: 1%; }
-.sign-table .sv { border-bottom: 1px dotted #999; min-width: 8em; }
+/* 簽名區:逐列左右對稱、甲乙方各佔一半(對等),列距加大預留用印大小章位置 */
+.sign-table { margin-top: 24px; table-layout: fixed; }
+.sign-table td { vertical-align: bottom; font-size: 18px; line-height: 1.75; padding: 18px 0 4px; overflow: hidden; }
+.sign-table td:nth-child(1) { width: 31%; }
+.sign-table td:nth-child(2) { width: 19%; }
+.sign-table td:nth-child(3) { width: 21%; padding-left: 16px; }
+.sign-table td:nth-child(4) { width: 29%; }
+.sign-table .sl { white-space: nowrap; padding-right: 6px; }
+.sign-table .sv { border-bottom: 1px dotted #999; word-break: break-all; }
 .sign-table .sv-empty { border-bottom: none; }
-.sign-table td:nth-child(3) { padding-left: 26px; }
 /* 第一列(甲方/乙方名稱)下方預留公司大章用印空間 */
 .sign-table tr:first-child td { padding-bottom: 52px; }
+/* 簽約頁:簽名表在上,「中華民國○年○月○日」壓在頁尾上方 */
+.sign-page .sign-area { flex: 1; display: flex; flex-direction: column; }
+.sign-page .sign-area .doc-footer { margin-top: auto; padding-bottom: 6px; }
 
 .doc-footer { text-align: center; margin-top: 30px; font-size: 18px; letter-spacing: 2px; }
 
