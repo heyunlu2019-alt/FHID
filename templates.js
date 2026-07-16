@@ -28,7 +28,7 @@ const COVER_BACK_TEMPLATE = `
   {{BRANCH_ADDRESS_LIST}}
   <div class="branch-block">
     <div class="branch-name">總管理處</div>
-    <div>104 台北市民生東路2段143號6F</div>
+    <div>104 台北市民生東路二段143號6F</div>
     <div>6F., No.143, Sec. 2, Minsheng E. Rd., Taipei City 104, Taiwan</div>
     <div>TEL:+886-2-2501-3278　FAX:+886-2-2501-3387</div>
   </div>
