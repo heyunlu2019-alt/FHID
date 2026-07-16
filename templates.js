@@ -53,7 +53,7 @@ const TEMPLATE_ENGINEERING = `
 <p><b>一、工程名稱：</b><span class="fill">{{eng_projectName}}</span></p>
 <p><b>二、工程地點：</b><span class="fill">{{eng_projectLocation}}</span></p>
 <p><b>三、工程範圍</b><br>乙方依照設計詳圖及估價單（如附件），經甲方簽證同意後依所列項目進行施工。</p>
-<p><b>四、工程總價</b><br>總價計新台幣 <span class="fill">{{eng_totalAmount_capital}}</span> 元整（大寫）（{{eng_taxNote}}）。</p>
+<p><b>四、工程總價</b><br>總價計新台幣 <span class="fill">{{eng_totalAmount_capital}}</span>（大寫）（{{eng_taxNote}}）。</p>
 <p><b>五、工期計算</b></p>
 <p>（一）本工程自 {{eng_startDate}} 起開工，全部工程須在 {{eng_endDate}} 完工。本工程如發生天災人禍等人力不可抗拒事變、受甲方其他工程之影響、甲方變更工程、甲方遲未決定材料及施作樣式或其他不可歸責於乙方之事由，乙方均得依實際延遲時間延長工期。</p>
 <p>（二）乙方向甲方收取之定金係作為施工備料之用，若甲方未支付定金（包括票據未兌現前），乙方得暫時不開工，並以實際收到定金或其票據兌現日之翌日為開工日，但若甲方遲於開工日後七日仍未支付定金時（包括票據未能兌現），乙方得依第十二條規定解除/終止合約。</p>

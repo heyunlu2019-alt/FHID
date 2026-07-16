@@ -490,7 +490,7 @@ function render() {
   const rawEngEnd = d.eng_endDate;
   d.eng_startDate = rawEngStart ? toRocFullDate(rawEngStart) : "　　年　　月　　日";
   d.eng_endDate = rawEngEnd ? toRocFullDate(rawEngEnd) : "　　年　　月　　日";
-  d.eng_totalAmount_capital = numberToChineseCapital(d.eng_totalAmount);
+  d.eng_totalAmount_capital = d.eng_totalAmount ? numberToChineseCapital(d.eng_totalAmount) : "";
   d.eng_taxNote = d.eng_taxNote || "含稅";
 
   const engCount = Number(d.eng_installmentCount) || 4;
@@ -569,8 +569,10 @@ function buildFileName(ext) {
 
 // ---------------- Word 匯出(原生 docx) ----------------
 // 直接產生原生 Word 段落/表格/頁碼,不經 HTML 轉換,格式才能與預覽/PDF一致。
+// 注意:spacing.line 搭配 lineRule:"auto" 時,單位是 1/240 行(即 360=1.5倍行距)。
 
 const DOCX_CONTENT_W = 10092; // A4 寬 11906 - 左右邊距 907*2 (twip)
+const DOCX_SUB_INDENT = 250;  // 編號小項縮排(約一個全形字)
 
 function _noBorder() {
   const n = { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" };
@@ -582,21 +584,19 @@ function _gridBorder() {
   return { top: b, bottom: b, left: b, right: b };
 }
 
-// 元素內文(含 <b>、<br>、.fill 底線欄位)→ TextRun 陣列
-function _inlineRuns(el, fmt, runs, state) {
+// 元素內文(含 <b>、.fill 底線欄位)→ TextRun 陣列(不處理 <br>,由段落切割負責)
+function _inlineRuns(el, fmt, runs) {
   el.childNodes.forEach(n => {
     if (n.nodeType === Node.TEXT_NODE) {
-      const text = n.textContent.replace(/\n/g, "");
+      const text = n.textContent.replace(/[\r\n]/g, "");
       if (text) {
         runs.push(new docx.TextRun({
           text, bold: fmt.bold, size: fmt.size,
-          underline: fmt.underline ? { type: docx.UnderlineType.SINGLE } : undefined,
-          break: state.breaks || undefined
+          underline: fmt.underline ? { type: docx.UnderlineType.SINGLE } : undefined
         }));
-        state.breaks = 0;
       }
     } else if (n.nodeType === Node.ELEMENT_NODE) {
-      if (n.tagName === "BR") { state.breaks += 1; return; }
+      if (n.tagName === "BR") return;
       const f = Object.assign({}, fmt);
       if (n.tagName === "B" || n.tagName === "STRONG") f.bold = true;
       if (n.classList && n.classList.contains("fill")) {
@@ -604,40 +604,80 @@ function _inlineRuns(el, fmt, runs, state) {
         if (!n.textContent.trim()) {
           runs.push(new docx.TextRun({
             text: "　　　　　", size: f.size,
-            underline: { type: docx.UnderlineType.SINGLE },
-            break: state.breaks || undefined
+            underline: { type: docx.UnderlineType.SINGLE }
           }));
-          state.breaks = 0;
           return;
         }
       }
-      _inlineRuns(n, f, runs, state);
+      _inlineRuns(n, f, runs);
     }
   });
 }
 
 function _runsOf(el, size, bold) {
-  const runs = [], state = { breaks: 0 };
-  _inlineRuns(el, { size: size || 25, bold: !!bold }, runs, state);
+  const runs = [];
+  _inlineRuns(el, { size: size || 24, bold: !!bold }, runs);
   return runs;
 }
 
-function _para(el, opts) {
+// 依 <br> 把元素切成多個段落片段(Word 對「兩端對齊+手動換行」會把字撐滿整行,必須改成獨立段落)
+function _segmentsOf(el) {
+  const segs = [];
+  let cur = document.createElement("span");
+  el.childNodes.forEach(n => {
+    if (n.nodeType === Node.ELEMENT_NODE && n.tagName === "BR") {
+      segs.push(cur);
+      cur = document.createElement("span");
+    } else {
+      cur.appendChild(n.cloneNode(true));
+    }
+  });
+  segs.push(cur);
+  return segs.filter(s => s.textContent.replace(/[\s　]/g, "") !== "" || s.querySelector(".fill"));
+}
+
+// 去掉片段開頭的全形/半形空白,回傳是否有前導縮排
+function _stripLead(seg) {
+  let lead = 0;
+  const walker = document.createTreeWalker(seg, NodeFilter.SHOW_TEXT);
+  const first = walker.nextNode();
+  if (first) {
+    const m = first.textContent.match(/^[\s　]+/);
+    if (m) {
+      lead = m[0].length;
+      first.textContent = first.textContent.slice(m[0].length);
+    }
+  }
+  return lead;
+}
+
+// 段落(P)→ 一或多個 Word 段落:<br> 拆段、編號小項用真正縮排對齊
+function _parasFromP(el, opts) {
   opts = opts || {};
   const isSub = el.classList && el.classList.contains("sub-item");
   const isHeading = el.tagName === "P" && el.querySelector("b") && el.textContent.trim().length <= 16;
-  return new docx.Paragraph({
-    children: _runsOf(el, opts.size),
-    alignment: docx.AlignmentType.JUSTIFIED,
-    spacing: { before: isSub ? 10 : (isHeading ? 200 : 70), after: isSub ? 10 : 70 },
-    pageBreakBefore: !!opts.pageBreakBefore
+  const segs = _segmentsOf(el);
+  return segs.map((seg, i) => {
+    const lead = _stripLead(seg);
+    const text = seg.textContent;
+    const indent = (lead > 0 || /^\d+\.\d/.test(text)) ? DOCX_SUB_INDENT : 0;
+    return new docx.Paragraph({
+      children: _runsOf(seg, opts.size),
+      alignment: docx.AlignmentType.JUSTIFIED,
+      indent: indent ? { left: indent } : undefined,
+      spacing: {
+        before: i === 0 ? (isSub ? 10 : (isHeading ? 200 : 80)) : 30,
+        after: i === segs.length - 1 ? (isSub ? 10 : 80) : 30
+      },
+      pageBreakBefore: !!opts.pageBreakBefore && i === 0
+    });
   });
 }
 
 function _textPara(text, opts) {
   opts = opts || {};
   return new docx.Paragraph({
-    children: [new docx.TextRun({ text, bold: opts.bold, size: opts.size || 25, color: opts.color })],
+    children: [new docx.TextRun({ text, bold: opts.bold, size: opts.size || 24, color: opts.color })],
     alignment: opts.alignment,
     spacing: opts.spacing || { before: 40, after: 40 },
     pageBreakBefore: !!opts.pageBreakBefore,
@@ -646,7 +686,7 @@ function _textPara(text, opts) {
 }
 
 function _pageBreakPara() {
-  return new docx.Paragraph({ children: [new docx.PageBreak()] });
+  return new docx.Paragraph({ children: [new docx.PageBreak()], spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } });
 }
 
 // 付款表/階段表(有框、表頭底色、金額靠右)
@@ -671,9 +711,9 @@ function _tableFrom(tb, colWidths) {
         margins: { top: 40, bottom: 40, left: 80, right: 80 },
         verticalAlign: docx.VerticalAlign.TOP,
         children: [new docx.Paragraph({
-          children: _runsOf(td, 22, isHead),
+          children: _runsOf(td, 21, isHead),
           alignment: alignRight ? docx.AlignmentType.RIGHT : (alignCenter ? docx.AlignmentType.CENTER : docx.AlignmentType.LEFT),
-          spacing: { before: 0, after: 0 }
+          spacing: { before: 0, after: 0, line: 280, lineRule: "auto" }
         })]
       }));
     });
@@ -695,8 +735,8 @@ function _partyTable(tb) {
       columnSpan: td.colSpan > 1 ? td.colSpan : undefined,
       margins: { top: 20, bottom: 20, left: 40, right: 40 },
       children: [new docx.Paragraph({
-        children: _runsOf(td, 25, td.classList.contains("label")),
-        spacing: { before: 0, after: 0 }
+        children: _runsOf(td, 24, td.classList.contains("label")),
+        spacing: { before: 0, after: 0, line: 300, lineRule: "auto" }
       })]
     }));
     rows.push(new docx.TableRow({ children: cells }));
@@ -719,7 +759,10 @@ function _signTable(tb) {
         borders,
         verticalAlign: docx.VerticalAlign.BOTTOM,
         margins: { top: 20, bottom: 20, left: 20, right: 60 },
-        children: [new docx.Paragraph({ children: _runsOf(td, 21), spacing: { before: 0, after: 0 } })]
+        children: [new docx.Paragraph({
+          children: _runsOf(td, 21),
+          spacing: { before: 0, after: 0, line: 260, lineRule: "auto" }
+        })]
       });
     });
     rows.push(new docx.TableRow({
@@ -735,12 +778,21 @@ function _infoBox(box) {
   const paras = [];
   const title = box.querySelector(".payment-info-title");
   if (title) {
-    paras.push(new docx.Paragraph({ children: _runsOf(title, 23, true), spacing: { before: 0, after: 60 } }));
+    paras.push(new docx.Paragraph({
+      children: _runsOf(title, 22, true),
+      spacing: { before: 0, after: 60, line: 300, lineRule: "auto" }
+    }));
   }
   const clone = box.cloneNode(true);
   const t2 = clone.querySelector(".payment-info-title");
   if (t2) t2.remove();
-  paras.push(new docx.Paragraph({ children: _runsOf(clone, 23), spacing: { before: 0, after: 0 } }));
+  _segmentsOf(clone).forEach(seg => {
+    _stripLead(seg);
+    paras.push(new docx.Paragraph({
+      children: _runsOf(seg, 22),
+      spacing: { before: 20, after: 20, line: 300, lineRule: "auto" }
+    }));
+  });
   const b = { style: docx.BorderStyle.SINGLE, size: 6, color: "998A2E" };
   return new docx.Table({
     width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA },
@@ -768,23 +820,26 @@ function _logoRun() {
   } catch (e) { return null; }
 }
 
-// 封面
+// 封面(單頁)
 function _coverChildren(cover) {
   const out = [];
   Array.from(cover.querySelector(".cover-title").textContent.trim()).forEach((ch, i) => {
     out.push(new docx.Paragraph({
       children: [new docx.TextRun({ text: ch, size: 44 })],
       alignment: docx.AlignmentType.CENTER,
-      spacing: { before: i === 0 ? 1300 : 60, after: 60 }
+      spacing: { before: i === 0 ? 1100 : 30, after: 30, line: 260, lineRule: "auto" }
     }));
   });
   const badge = cover.querySelector(".cover-badge");
   if (badge && badge.textContent.trim()) {
     out.push(_textPara(badge.textContent.trim(), {
-      alignment: docx.AlignmentType.CENTER, bold: true, size: 21, color: "B8960C"
+      alignment: docx.AlignmentType.CENTER, bold: true, size: 21, color: "B8960C",
+      spacing: { before: 60, after: 0, line: 260, lineRule: "auto" }
     }));
   }
-  for (let i = 0; i < 7; i++) out.push(new docx.Paragraph({ text: "" }));
+  for (let i = 0; i < 5; i++) {
+    out.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } }));
+  }
 
   const fieldParas = Array.from(cover.querySelectorAll(".cover-row")).map(r => {
     const label = r.querySelector(".cover-label");
@@ -795,7 +850,7 @@ function _coverChildren(cover) {
         new docx.TextRun({ text: (label ? label.textContent.trim() : "") + "：", size: 22 }),
         new docx.TextRun({ text: val, size: 22, underline: { type: docx.UnderlineType.SINGLE } })
       ],
-      spacing: { before: 50, after: 50 }
+      spacing: { before: 40, after: 40, line: 280, lineRule: "auto" }
     });
   });
   const logoRun = _logoRun();
@@ -806,18 +861,24 @@ function _coverChildren(cover) {
       children: [
         new docx.TableCell({
           borders: _noBorder(), verticalAlign: docx.VerticalAlign.BOTTOM,
-          children: [logoRun ? new docx.Paragraph({ children: [logoRun] }) : new docx.Paragraph({ text: "" })]
+          children: [logoRun
+            ? new docx.Paragraph({ children: [logoRun], spacing: { before: 0, after: 0 } })
+            : new docx.Paragraph({ text: "", spacing: { before: 0, after: 0 } })]
         }),
         new docx.TableCell({ borders: _noBorder(), verticalAlign: docx.VerticalAlign.BOTTOM, children: fieldParas })
       ]
     })]
   }));
   out.push(new docx.Paragraph({
-    text: "", spacing: { before: 80, after: 20 },
+    text: "", spacing: { before: 60, after: 20, line: 100, lineRule: "auto" },
     border: { bottom: { style: docx.BorderStyle.SINGLE, size: 12, color: "333333" } }
   }));
   const brand = cover.querySelector(".cover-brand-name");
-  if (brand) out.push(_textPara(brand.textContent.trim(), { size: 26, spacing: { before: 60, after: 30 } }));
+  if (brand) {
+    out.push(_textPara(brand.textContent.trim(), {
+      size: 26, spacing: { before: 40, after: 20, line: 280, lineRule: "auto" }
+    }));
+  }
   const branches = cover.querySelector(".cover-branches");
   if (branches) {
     const runs = [];
@@ -826,7 +887,7 @@ function _coverChildren(cover) {
       const name = chk.textContent.replace(/[■□✔]/g, "").trim();
       runs.push(new docx.TextRun({ text: (sel ? "■" : "□") + name + "　", size: 18 }));
     });
-    out.push(new docx.Paragraph({ children: runs, spacing: { before: 0, after: 30 } }));
+    out.push(new docx.Paragraph({ children: runs, spacing: { before: 0, after: 20, line: 240, lineRule: "auto" } }));
   }
   const bar = cover.querySelector(".cover-footer-bar");
   if (bar) {
@@ -835,8 +896,14 @@ function _coverChildren(cover) {
     for (let i = 0; i < cells.length; i += 2) {
       rows.push(new docx.TableRow({
         children: [
-          new docx.TableCell({ borders: _noBorder(), children: [_textPara(cells[i] || "", { size: 17, spacing: { before: 0, after: 0 } })] }),
-          new docx.TableCell({ borders: _noBorder(), children: [_textPara(cells[i + 1] || "", { size: 17, alignment: docx.AlignmentType.RIGHT, spacing: { before: 0, after: 0 } })] })
+          new docx.TableCell({
+            borders: _noBorder(),
+            children: [_textPara(cells[i] || "", { size: 17, spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } })]
+          }),
+          new docx.TableCell({
+            borders: _noBorder(),
+            children: [_textPara(cells[i + 1] || "", { size: 17, alignment: docx.AlignmentType.RIGHT, spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } })]
+          })
         ]
       }));
     }
@@ -845,7 +912,7 @@ function _coverChildren(cover) {
   return out;
 }
 
-// 封底(分公司地址列表)
+// 封底(分公司地址列表,單頁)
 function _coverBackChildren(back) {
   const out = [];
   let first = true;
@@ -854,7 +921,7 @@ function _coverBackChildren(back) {
       Array.from(div.children).forEach((line, li) => {
         out.push(new docx.Paragraph({
           children: [new docx.TextRun({ text: line.textContent.trim(), bold: li === 0, size: 18 })],
-          spacing: { before: li === 0 && !first ? 100 : 0, after: 0 },
+          spacing: { before: li === 0 && !first ? 70 : 0, after: 0, line: 250, lineRule: "auto" },
           pageBreakBefore: first && li === 0
         }));
         if (li === 0) first = false;
@@ -862,7 +929,7 @@ function _coverBackChildren(back) {
     } else if (div.classList.contains("branch-email")) {
       out.push(new docx.Paragraph({
         children: [new docx.TextRun({ text: div.textContent.trim(), size: 18 })],
-        spacing: { before: 160, after: 0 }
+        spacing: { before: 140, after: 0, line: 250, lineRule: "auto" }
       }));
     }
   });
@@ -885,25 +952,25 @@ function _blockToDocx(el, pb) {
     arr.push(_partyTable(el.querySelector("table")));
     return arr;
   }
-  if (el.tagName === "P") return [_para(el, { pageBreakBefore: pb })];
+  if (el.tagName === "P") return _parasFromP(el, { pageBreakBefore: pb });
   if (el.tagName === "TABLE") {
     const arr = [];
     if (pb) arr.push(_pageBreakPara());
     const isStage = el.classList.contains("stage-table");
     arr.push(_tableFrom(el, isStage ? [1500, 4792, 800, 3000] : [1900, 4392, 800, 3000]));
-    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0 } }));
+    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 120, lineRule: "auto" } }));
     return arr;
   }
   if (el.classList.contains("payment-info-box")) {
     const arr = [];
     if (pb) arr.push(_pageBreakPara());
     arr.push(_infoBox(el));
-    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0 } }));
+    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 120, lineRule: "auto" } }));
     return arr;
   }
   if (el.classList.contains("appendix-list")) {
     return Array.from(el.children).map((d, i) => new docx.Paragraph({
-      children: _runsOf(d, 25),
+      children: _runsOf(d, 24),
       spacing: { before: 20, after: 20 },
       pageBreakBefore: pb && i === 0
     }));
@@ -923,10 +990,10 @@ function _blockToDocx(el, pb) {
   if (el.classList.contains("appendix-fixed")) {
     const arr = [];
     arr.push(new docx.Paragraph({
-      text: "", pageBreakBefore: pb, spacing: { before: 0, after: 80 },
+      text: "", pageBreakBefore: pb, spacing: { before: 0, after: 60, line: 100, lineRule: "auto" },
       border: { bottom: { style: docx.BorderStyle.DOTTED, size: 4, color: "AAAAAA" } }
     }));
-    Array.from(el.children).forEach(p => arr.push(_para(p)));
+    Array.from(el.children).forEach(p => arr.push(..._parasFromP(p)));
     return arr;
   }
   if (el.classList.contains("doc-footer")) {
@@ -934,7 +1001,7 @@ function _blockToDocx(el, pb) {
       alignment: docx.AlignmentType.CENTER, spacing: { before: 700, after: 0 }, pageBreakBefore: pb
     })];
   }
-  return [_para(el, { pageBreakBefore: pb })];
+  return _parasFromP(el, { pageBreakBefore: pb });
 }
 
 function _contractChildren(pages) {
@@ -964,16 +1031,14 @@ async function exportWord() {
     margin: { top: 1021, bottom: 1021, left: 907, right: 907 }
   };
 
-  const footerRuns = [
-    new docx.TextRun({ text: "第 ", size: 16, color: "777777" }),
-    new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 16, color: "777777" }),
-    new docx.TextRun({ text: " 頁", size: 16, color: "777777" }),
-    new docx.TextRun({ text: "\t" + docCode, size: 16, color: "777777" })
-  ];
   const footer = new docx.Footer({
     children: [new docx.Paragraph({
       tabStops: [{ type: docx.TabStopType.RIGHT, position: DOCX_CONTENT_W }],
-      children: footerRuns,
+      children: [
+        new docx.TextRun({ text: "第 ", size: 16, color: "777777" }),
+        new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 16, color: "777777" }),
+        new docx.TextRun({ text: " 頁\t" + docCode, size: 16, color: "777777" })
+      ],
       border: { top: { style: docx.BorderStyle.SINGLE, size: 2, color: "CCCCCC" } }
     })]
   });
@@ -982,8 +1047,8 @@ async function exportWord() {
     styles: {
       default: {
         document: {
-          run: { font: { ascii: "SimSun", eastAsia: "SimSun", hAnsi: "SimSun" }, size: 25 },
-          paragraph: { spacing: { line: 400, lineRule: "auto" } }
+          run: { font: { ascii: "SimSun", eastAsia: "SimSun", hAnsi: "SimSun" }, size: 24 },
+          paragraph: { spacing: { line: 340, lineRule: "auto" } }
         }
       }
     },
