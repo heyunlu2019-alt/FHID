@@ -129,7 +129,7 @@ const TEMPLATE_ENGINEERING = `
 {{APPENDIX_LIST}}
 <div class="sign-area">
 {{SIGN_BLOCK}}
-<div class="doc-footer">中　　華　　民　　國　　　年　　月　　日</div>
+<div class="doc-footer">{{signDate_zh}}</div>
 </div>
 `;
 

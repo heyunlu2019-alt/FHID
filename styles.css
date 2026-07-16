@@ -210,11 +210,12 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 .sign-area { margin-top: 10px; }
 /* 簽名區:逐列左右對稱、甲乙方各佔一半(對等),列距加大預留用印大小章位置 */
 .sign-table { margin-top: 24px; table-layout: fixed; }
-.sign-table td { vertical-align: bottom; font-size: 18px; line-height: 1.75; padding: 18px 0 4px; overflow: hidden; }
-.sign-table td:nth-child(1) { width: 31%; }
-.sign-table td:nth-child(2) { width: 19%; }
-.sign-table td:nth-child(3) { width: 21%; padding-left: 16px; }
-.sign-table td:nth-child(4) { width: 29%; }
+/* 簽名欄字級略縮(15px),公司全名與 E-mail 不斷行 */
+.sign-table td { vertical-align: bottom; font-size: 15px; line-height: 1.75; padding: 18px 0 4px; overflow: hidden; }
+.sign-table td:nth-child(1) { width: 27%; }
+.sign-table td:nth-child(2) { width: 23%; }
+.sign-table td:nth-child(3) { width: 17%; padding-left: 16px; }
+.sign-table td:nth-child(4) { width: 33%; }
 .sign-table .sl { white-space: nowrap; padding-right: 6px; }
 .sign-table .sv { border-bottom: 1px dotted #999; word-break: break-all; }
 .sign-table .sv-empty { border-bottom: none; }

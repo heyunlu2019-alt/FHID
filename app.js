@@ -85,6 +85,19 @@ function numberToChineseCapital(num) {
   return result + "元整";
 }
 
+// 簽署日期 → 全中文(壓底日期用):2026-07-16 → 中華民國一一五年七月十六日
+function toChineseSignDate(dateStr) {
+  const dt = dateStr ? new Date(dateStr + "T00:00:00") : null;
+  if (!dt || isNaN(dt.getTime())) return "中華民國　　年　　月　　日";
+  const digits = ["〇","一","二","三","四","五","六","七","八","九"];
+  const yr = String(dt.getFullYear() - 1911).split("").map(c => digits[+c]).join("");
+  const num = n => n <= 10
+    ? ["","一","二","三","四","五","六","七","八","九","十"][n]
+    : (n < 20 ? "十" + (n % 10 ? digits[n % 10] : "")
+              : digits[Math.floor(n / 10)] + "十" + (n % 10 ? digits[n % 10] : ""));
+  return `中華民國${yr}年${num(dt.getMonth() + 1)}月${num(dt.getDate())}日`;
+}
+
 function toRocFullDate(dateStr) {
   if (!dateStr) return null;
   const dt = new Date(dateStr + "T00:00:00");
@@ -487,7 +500,8 @@ function render() {
   d.design_discountPct = Math.round(Number(d.design_discountPct) || 90);
   d.design_discountZhe = pctToZheText(d.design_discountPct);
   d.design_caseDate = d.design_caseDate || toRocFullDate(d.signDate) || "　　年　　月　　日";
-  d.design_signDate_roc = "中華民國" + (toRocFullDate(d.signDate) || "　　年　　月　　日");
+  d.design_signDate_roc = toChineseSignDate(d.signDate);
+  d.signDate_zh = toChineseSignDate(d.signDate);
   d.cover_date = toRocFullDate(d.signDate) || "";
 
   const pctSum = pcts.reduce((a, b) => a + b, 0);
