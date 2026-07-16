@@ -567,143 +567,440 @@ function buildFileName(ext) {
   return `${cfg.label}_${partyA}_${today}.${ext}`;
 }
 
-// Word 匯出:Word 不支援網頁預覽用的 flex/固定欄寬等 CSS,
-// 這裡把每一頁轉換成 Word 友善結構(行內樣式+表格),格式才不會跑掉。
-const WORD_EXPORT_CSS = `
-body{font-family:"SimSun","宋体","NSimSun","PMingLiU","新細明體",serif;font-size:12.5pt;line-height:1.7;}
-p{margin:5pt 0;text-align:justify;}
-.sub-item{margin:1pt 0;}
-.doc-title{text-align:center;font-size:18pt;font-weight:bold;letter-spacing:6pt;margin:0 0 10pt;}
-`;
+// ---------------- Word 匯出(原生 docx) ----------------
+// 直接產生原生 Word 段落/表格/頁碼,不經 HTML 轉換,格式才能與預覽/PDF一致。
 
-function transformPageForWord(pg, logoData) {
-  // 去除為列印勻版加上的行內邊距(Word 自行分頁,不需要)
-  pg.querySelectorAll("[style]").forEach(el => { el.style.marginTop = ""; });
+const DOCX_CONTENT_W = 10092; // A4 寬 11906 - 左右邊距 907*2 (twip)
 
-  // 封面:LOGO+欄位列(flex)改成表格
-  const fieldsRow = pg.querySelector(".cover-fields-row");
-  if (fieldsRow) {
-    const logo = logoData ? `<img src="${logoData}" width="130">` : "";
-    const fields = pg.querySelector(".cover-fields");
-    fieldsRow.outerHTML = `<table width="100%" style="border-collapse:collapse"><tr>` +
-      `<td style="border:none;vertical-align:bottom">${logo}</td>` +
-      `<td style="border:none;vertical-align:bottom;width:58%">${fields ? fields.innerHTML : ""}</td></tr></table>`;
-  }
-  const spacer = pg.querySelector(".cover-spacer");
-  if (spacer) spacer.outerHTML = `<div style="height:65mm">&nbsp;</div>`;
-  const title = pg.querySelector(".cover-title");
-  if (title) title.setAttribute("style", "text-align:center;font-size:20pt;letter-spacing:4pt;margin-top:30mm");
-  const badge = pg.querySelector(".cover-badge");
-  if (badge) badge.setAttribute("style", "text-align:center;color:#b8960c;font-weight:bold;font-size:10pt");
-  pg.querySelectorAll(".cover-row").forEach(r => r.setAttribute("style", "font-size:11pt;margin:3pt 0"));
-  const brand = pg.querySelector(".cover-brand-name");
-  if (brand) brand.setAttribute("style", "font-size:13pt;letter-spacing:2pt");
-  const branches = pg.querySelector(".cover-branches");
-  if (branches) {
-    branches.setAttribute("style", "font-size:9pt");
-    branches.querySelectorAll(".branch-chk").forEach(chk => {
-      const box = chk.querySelector(".box");
-      const sel = chk.classList.contains("selected");
-      if (box) box.outerHTML = sel ? "■" : "□";
-      chk.insertAdjacentText("beforeend", "　");
-    });
-  }
-  const footBar = pg.querySelector(".cover-footer-bar");
-  if (footBar) {
-    const cells = Array.from(footBar.children).map(d => d.textContent);
-    let rowsHtml = "";
-    for (let i = 0; i < cells.length; i += 2) {
-      rowsHtml += `<tr><td style="border:none;font-size:9pt">${cells[i] || ""}</td>` +
-        `<td style="border:none;font-size:9pt;text-align:right">${cells[i + 1] || ""}</td></tr>`;
+function _noBorder() {
+  const n = { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  return { top: n, bottom: n, left: n, right: n };
+}
+
+function _gridBorder() {
+  const b = { style: docx.BorderStyle.SINGLE, size: 4, color: "999999" };
+  return { top: b, bottom: b, left: b, right: b };
+}
+
+// 元素內文(含 <b>、<br>、.fill 底線欄位)→ TextRun 陣列
+function _inlineRuns(el, fmt, runs, state) {
+  el.childNodes.forEach(n => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      const text = n.textContent.replace(/\n/g, "");
+      if (text) {
+        runs.push(new docx.TextRun({
+          text, bold: fmt.bold, size: fmt.size,
+          underline: fmt.underline ? { type: docx.UnderlineType.SINGLE } : undefined,
+          break: state.breaks || undefined
+        }));
+        state.breaks = 0;
+      }
+    } else if (n.nodeType === Node.ELEMENT_NODE) {
+      if (n.tagName === "BR") { state.breaks += 1; return; }
+      const f = Object.assign({}, fmt);
+      if (n.tagName === "B" || n.tagName === "STRONG") f.bold = true;
+      if (n.classList && n.classList.contains("fill")) {
+        f.underline = true;
+        if (!n.textContent.trim()) {
+          runs.push(new docx.TextRun({
+            text: "　　　　　", size: f.size,
+            underline: { type: docx.UnderlineType.SINGLE },
+            break: state.breaks || undefined
+          }));
+          state.breaks = 0;
+          return;
+        }
+      }
+      _inlineRuns(n, f, runs, state);
     }
-    footBar.outerHTML = `<table width="100%" style="border-collapse:collapse">${rowsHtml}</table>`;
-  }
-
-  // 封底
-  if (pg.classList.contains("cover-back-page")) {
-    pg.querySelectorAll(".branch-block, .branch-email").forEach(b =>
-      b.setAttribute("style", "font-size:9pt;margin-bottom:5pt"));
-  }
-
-  // 匯款資訊框:div 邊框 Word 支援差,改為單格表格
-  pg.querySelectorAll(".payment-info-box").forEach(box => {
-    box.outerHTML = `<table width="100%" style="border-collapse:collapse;margin:6pt 0"><tr>` +
-      `<td style="border:1px solid #998a2e;background:#fffdf3;padding:5pt 9pt;font-size:11.5pt">${box.innerHTML}</td></tr></table>`;
   });
+}
 
-  // 付款/階段/附件表格:邊框與底色全部行內化
-  pg.querySelectorAll(".payment-table, .stage-table, .appendix-table").forEach(tb => {
-    tb.setAttribute("width", "100%");
-    tb.setAttribute("style", "border-collapse:collapse;margin:6pt 0");
-    tb.querySelectorAll("td, th").forEach(c => {
-      const head = c.tagName === "TH" ? "background:#faf3d1;" : "";
-      c.setAttribute("style", `border:1px solid #999;padding:2pt 5pt;font-size:11pt;vertical-align:top;${head}`);
+function _runsOf(el, size, bold) {
+  const runs = [], state = { breaks: 0 };
+  _inlineRuns(el, { size: size || 25, bold: !!bold }, runs, state);
+  return runs;
+}
+
+function _para(el, opts) {
+  opts = opts || {};
+  const isSub = el.classList && el.classList.contains("sub-item");
+  const isHeading = el.tagName === "P" && el.querySelector("b") && el.textContent.trim().length <= 16;
+  return new docx.Paragraph({
+    children: _runsOf(el, opts.size),
+    alignment: docx.AlignmentType.JUSTIFIED,
+    spacing: { before: isSub ? 10 : (isHeading ? 200 : 70), after: isSub ? 10 : 70 },
+    pageBreakBefore: !!opts.pageBreakBefore
+  });
+}
+
+function _textPara(text, opts) {
+  opts = opts || {};
+  return new docx.Paragraph({
+    children: [new docx.TextRun({ text, bold: opts.bold, size: opts.size || 25, color: opts.color })],
+    alignment: opts.alignment,
+    spacing: opts.spacing || { before: 40, after: 40 },
+    pageBreakBefore: !!opts.pageBreakBefore,
+    border: opts.border
+  });
+}
+
+function _pageBreakPara() {
+  return new docx.Paragraph({ children: [new docx.PageBreak()] });
+}
+
+// 付款表/階段表(有框、表頭底色、金額靠右)
+function _tableFrom(tb, colWidths) {
+  const rows = [];
+  tb.querySelectorAll("tr").forEach(tr => {
+    const cells = [];
+    let ci = 0;
+    Array.from(tr.cells).forEach(td => {
+      const isHead = td.tagName === "TH";
+      const span = td.colSpan || 1;
+      let w = 0;
+      for (let k = 0; k < span; k++) w += colWidths[ci + k] || 0;
+      ci += span;
+      const alignRight = td.classList.contains("cell-amount");
+      const alignCenter = td.classList.contains("cell-pct") || isHead;
+      cells.push(new docx.TableCell({
+        width: { size: w, type: docx.WidthType.DXA },
+        columnSpan: span > 1 ? span : undefined,
+        borders: _gridBorder(),
+        shading: isHead ? { fill: "FAF3D1" } : undefined,
+        margins: { top: 40, bottom: 40, left: 80, right: 80 },
+        verticalAlign: docx.VerticalAlign.TOP,
+        children: [new docx.Paragraph({
+          children: _runsOf(td, 22, isHead),
+          alignment: alignRight ? docx.AlignmentType.RIGHT : (alignCenter ? docx.AlignmentType.CENTER : docx.AlignmentType.LEFT),
+          spacing: { before: 0, after: 0 }
+        })]
+      }));
     });
+    rows.push(new docx.TableRow({ children: cells }));
   });
-
-  // 立約人表:無框
-  pg.querySelectorAll(".party-table").forEach(tb => {
-    tb.setAttribute("width", "100%");
-    tb.querySelectorAll("td").forEach(c => c.setAttribute("style", "border:none;padding:1pt 3pt"));
+  return new docx.Table({
+    width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA },
+    columnWidths: colWidths,
+    rows
   });
+}
 
-  // 簽名表:甲乙各半欄寬、值欄底線、列高預留用印
-  pg.querySelectorAll(".sign-table").forEach(tb => {
-    tb.setAttribute("width", "100%");
-    tb.setAttribute("style", "border-collapse:collapse;margin-top:14pt");
-    const widths = ["27%", "23%", "17%", "33%"];
-    Array.from(tb.rows).forEach((row, ri) => {
-      Array.from(row.cells).forEach((c, ci) => {
-        const underline = c.classList.contains("sv") ? "border-bottom:1px dotted #999;" : "";
-        const rowH = ri === 0 ? "height:1.5cm;" : "height:0.9cm;";
-        c.setAttribute("style",
-          `width:${widths[ci] || "auto"};border:none;${underline}${rowH}vertical-align:bottom;font-size:10.5pt;padding:2pt 4pt 1pt 0`);
+// 立約人表(無框,標籤粗體)
+function _partyTable(tb) {
+  const rows = [];
+  tb.querySelectorAll("tr").forEach(tr => {
+    const cells = Array.from(tr.cells).map(td => new docx.TableCell({
+      borders: _noBorder(),
+      columnSpan: td.colSpan > 1 ? td.colSpan : undefined,
+      margins: { top: 20, bottom: 20, left: 40, right: 40 },
+      children: [new docx.Paragraph({
+        children: _runsOf(td, 25, td.classList.contains("label")),
+        spacing: { before: 0, after: 0 }
+      })]
+    }));
+    rows.push(new docx.TableRow({ children: cells }));
+  });
+  return new docx.Table({ width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA }, rows });
+}
+
+// 簽名表(甲乙各半、值欄底線、列高預留用印)
+function _signTable(tb) {
+  const widths = [2725, 2321, 1716, 3330];
+  const rows = [];
+  Array.from(tb.rows).forEach((tr, ri) => {
+    const cells = Array.from(tr.cells).map((td, ci) => {
+      const borders = _noBorder();
+      if (td.classList.contains("sv")) {
+        borders.bottom = { style: docx.BorderStyle.DOTTED, size: 6, color: "999999" };
+      }
+      return new docx.TableCell({
+        width: { size: widths[ci] || 1000, type: docx.WidthType.DXA },
+        borders,
+        verticalAlign: docx.VerticalAlign.BOTTOM,
+        margins: { top: 20, bottom: 20, left: 20, right: 60 },
+        children: [new docx.Paragraph({ children: _runsOf(td, 21), spacing: { before: 0, after: 0 } })]
       });
     });
+    rows.push(new docx.TableRow({
+      height: { value: ri === 0 ? 900 : 540, rule: docx.HeightRule.ATLEAST },
+      children: cells
+    }));
   });
-
-  // 填寫欄位:底線;空白的放全形空格,客戶可直接在 Word 填寫
-  pg.querySelectorAll(".fill").forEach(f => {
-    if (!f.textContent.trim()) f.textContent = "　　　　　";
-    f.setAttribute("style", "text-decoration:underline");
-  });
-
-  pg.querySelectorAll(".doc-footer").forEach(d =>
-    d.setAttribute("style", "text-align:center;margin-top:28pt;letter-spacing:3pt"));
-  pg.querySelectorAll(".appendix-fixed").forEach(d =>
-    d.setAttribute("style", "border-top:1px dashed #aaa;padding-top:6pt"));
+  return new docx.Table({ width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA }, columnWidths: widths, rows });
 }
 
-function buildWordHtml(logoData) {
-  const root = document.getElementById("previewRoot").cloneNode(true);
-  root.querySelectorAll(".page-footer").forEach(el => el.remove());
-  const pages = Array.from(root.querySelectorAll("section.page"));
-  pages.forEach(pg => transformPageForWord(pg, logoData));
-  const body = pages.map((pg, i) =>
-    `<div${i < pages.length - 1 ? ' style="page-break-after:always"' : ""}>${pg.innerHTML}</div>`
-  ).join("\n");
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${WORD_EXPORT_CSS}</style></head><body>${body}</body></html>`;
+// 匯款資訊框(單格表格+底色)
+function _infoBox(box) {
+  const paras = [];
+  const title = box.querySelector(".payment-info-title");
+  if (title) {
+    paras.push(new docx.Paragraph({ children: _runsOf(title, 23, true), spacing: { before: 0, after: 60 } }));
+  }
+  const clone = box.cloneNode(true);
+  const t2 = clone.querySelector(".payment-info-title");
+  if (t2) t2.remove();
+  paras.push(new docx.Paragraph({ children: _runsOf(clone, 23), spacing: { before: 0, after: 0 } }));
+  const b = { style: docx.BorderStyle.SINGLE, size: 6, color: "998A2E" };
+  return new docx.Table({
+    width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA },
+    rows: [new docx.TableRow({
+      children: [new docx.TableCell({
+        borders: { top: b, bottom: b, left: b, right: b },
+        shading: { fill: "FFFDF3" },
+        margins: { top: 80, bottom: 80, left: 160, right: 160 },
+        children: paras
+      })]
+    })]
+  });
 }
 
-async function getLogoDataUrl() {
-  if (typeof LOGO_DATA_URI !== "undefined") return LOGO_DATA_URI; // 內建 base64,file:// 也可用
+function _logoRun() {
+  if (typeof LOGO_DATA_URI === "undefined") return null;
   try {
-    const resp = await fetch("assets/logo.png");
-    const blob = await resp.blob();
-    return await new Promise(res => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.onerror = () => res(null);
-      r.readAsDataURL(blob);
-    });
+    const b64 = LOGO_DATA_URI.split(",")[1];
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const img = document.querySelector(".cover-logo");
+    const ratio = (img && img.naturalWidth) ? img.naturalHeight / img.naturalWidth : 0.22;
+    return new docx.ImageRun({ type: "png", data: arr, transformation: { width: 150, height: Math.round(150 * ratio) } });
   } catch (e) { return null; }
 }
 
+// 封面
+function _coverChildren(cover) {
+  const out = [];
+  Array.from(cover.querySelector(".cover-title").textContent.trim()).forEach((ch, i) => {
+    out.push(new docx.Paragraph({
+      children: [new docx.TextRun({ text: ch, size: 44 })],
+      alignment: docx.AlignmentType.CENTER,
+      spacing: { before: i === 0 ? 1300 : 60, after: 60 }
+    }));
+  });
+  const badge = cover.querySelector(".cover-badge");
+  if (badge && badge.textContent.trim()) {
+    out.push(_textPara(badge.textContent.trim(), {
+      alignment: docx.AlignmentType.CENTER, bold: true, size: 21, color: "B8960C"
+    }));
+  }
+  for (let i = 0; i < 7; i++) out.push(new docx.Paragraph({ text: "" }));
+
+  const fieldParas = Array.from(cover.querySelectorAll(".cover-row")).map(r => {
+    const label = r.querySelector(".cover-label");
+    const fill = r.querySelector(".fill");
+    const val = fill && fill.textContent.trim() ? fill.textContent.trim() : "　　　　　　　　　　";
+    return new docx.Paragraph({
+      children: [
+        new docx.TextRun({ text: (label ? label.textContent.trim() : "") + "：", size: 22 }),
+        new docx.TextRun({ text: val, size: 22, underline: { type: docx.UnderlineType.SINGLE } })
+      ],
+      spacing: { before: 50, after: 50 }
+    });
+  });
+  const logoRun = _logoRun();
+  out.push(new docx.Table({
+    width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA },
+    columnWidths: [4300, 5792],
+    rows: [new docx.TableRow({
+      children: [
+        new docx.TableCell({
+          borders: _noBorder(), verticalAlign: docx.VerticalAlign.BOTTOM,
+          children: [logoRun ? new docx.Paragraph({ children: [logoRun] }) : new docx.Paragraph({ text: "" })]
+        }),
+        new docx.TableCell({ borders: _noBorder(), verticalAlign: docx.VerticalAlign.BOTTOM, children: fieldParas })
+      ]
+    })]
+  }));
+  out.push(new docx.Paragraph({
+    text: "", spacing: { before: 80, after: 20 },
+    border: { bottom: { style: docx.BorderStyle.SINGLE, size: 12, color: "333333" } }
+  }));
+  const brand = cover.querySelector(".cover-brand-name");
+  if (brand) out.push(_textPara(brand.textContent.trim(), { size: 26, spacing: { before: 60, after: 30 } }));
+  const branches = cover.querySelector(".cover-branches");
+  if (branches) {
+    const runs = [];
+    branches.querySelectorAll(".branch-chk").forEach(chk => {
+      const sel = chk.classList.contains("selected");
+      const name = chk.textContent.replace(/[■□✔]/g, "").trim();
+      runs.push(new docx.TextRun({ text: (sel ? "■" : "□") + name + "　", size: 18 }));
+    });
+    out.push(new docx.Paragraph({ children: runs, spacing: { before: 0, after: 30 } }));
+  }
+  const bar = cover.querySelector(".cover-footer-bar");
+  if (bar) {
+    const cells = Array.from(bar.children).map(d => d.textContent.trim());
+    const rows = [];
+    for (let i = 0; i < cells.length; i += 2) {
+      rows.push(new docx.TableRow({
+        children: [
+          new docx.TableCell({ borders: _noBorder(), children: [_textPara(cells[i] || "", { size: 17, spacing: { before: 0, after: 0 } })] }),
+          new docx.TableCell({ borders: _noBorder(), children: [_textPara(cells[i + 1] || "", { size: 17, alignment: docx.AlignmentType.RIGHT, spacing: { before: 0, after: 0 } })] })
+        ]
+      }));
+    }
+    out.push(new docx.Table({ width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA }, columnWidths: [6000, 4092], rows }));
+  }
+  return out;
+}
+
+// 封底(分公司地址列表)
+function _coverBackChildren(back) {
+  const out = [];
+  let first = true;
+  Array.from(back.children).forEach(div => {
+    if (div.classList.contains("branch-block")) {
+      Array.from(div.children).forEach((line, li) => {
+        out.push(new docx.Paragraph({
+          children: [new docx.TextRun({ text: line.textContent.trim(), bold: li === 0, size: 18 })],
+          spacing: { before: li === 0 && !first ? 100 : 0, after: 0 },
+          pageBreakBefore: first && li === 0
+        }));
+        if (li === 0) first = false;
+      });
+    } else if (div.classList.contains("branch-email")) {
+      out.push(new docx.Paragraph({
+        children: [new docx.TextRun({ text: div.textContent.trim(), size: 18 })],
+        spacing: { before: 160, after: 0 }
+      }));
+    }
+  });
+  return out;
+}
+
+// 內文區塊 → docx 元素
+function _blockToDocx(el, pb) {
+  if (el.tagName === "H1") {
+    return [new docx.Paragraph({
+      children: [new docx.TextRun({ text: el.textContent.trim(), bold: true, size: 36 })],
+      alignment: docx.AlignmentType.CENTER,
+      spacing: { before: 0, after: 240 },
+      pageBreakBefore: pb
+    })];
+  }
+  if (el.classList.contains("party-block")) {
+    const arr = [];
+    if (pb) arr.push(_pageBreakPara());
+    arr.push(_partyTable(el.querySelector("table")));
+    return arr;
+  }
+  if (el.tagName === "P") return [_para(el, { pageBreakBefore: pb })];
+  if (el.tagName === "TABLE") {
+    const arr = [];
+    if (pb) arr.push(_pageBreakPara());
+    const isStage = el.classList.contains("stage-table");
+    arr.push(_tableFrom(el, isStage ? [1500, 4792, 800, 3000] : [1900, 4392, 800, 3000]));
+    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0 } }));
+    return arr;
+  }
+  if (el.classList.contains("payment-info-box")) {
+    const arr = [];
+    if (pb) arr.push(_pageBreakPara());
+    arr.push(_infoBox(el));
+    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0 } }));
+    return arr;
+  }
+  if (el.classList.contains("appendix-list")) {
+    return Array.from(el.children).map((d, i) => new docx.Paragraph({
+      children: _runsOf(d, 25),
+      spacing: { before: 20, after: 20 },
+      pageBreakBefore: pb && i === 0
+    }));
+  }
+  if (el.classList.contains("sign-area")) {
+    const arr = [];
+    if (pb) arr.push(_pageBreakPara());
+    arr.push(_signTable(el.querySelector(".sign-table")));
+    const df = el.querySelector(".doc-footer");
+    if (df) {
+      arr.push(_textPara(df.textContent.trim(), {
+        alignment: docx.AlignmentType.CENTER, spacing: { before: 700, after: 0 }
+      }));
+    }
+    return arr;
+  }
+  if (el.classList.contains("appendix-fixed")) {
+    const arr = [];
+    arr.push(new docx.Paragraph({
+      text: "", pageBreakBefore: pb, spacing: { before: 0, after: 80 },
+      border: { bottom: { style: docx.BorderStyle.DOTTED, size: 4, color: "AAAAAA" } }
+    }));
+    Array.from(el.children).forEach(p => arr.push(_para(p)));
+    return arr;
+  }
+  if (el.classList.contains("doc-footer")) {
+    return [_textPara(el.textContent.trim(), {
+      alignment: docx.AlignmentType.CENTER, spacing: { before: 700, after: 0 }, pageBreakBefore: pb
+    })];
+  }
+  return [_para(el, { pageBreakBefore: pb })];
+}
+
+function _contractChildren(pages) {
+  const out = [];
+  pages.forEach((pg, pi) => {
+    let needBreak = pi > 0; // 第一頁由分節自然開新頁,之後每頁強制分頁對齊預覽
+    Array.from(pg.children).forEach(el => {
+      if (el.classList.contains("page-footer")) return;
+      const pb = needBreak;
+      needBreak = false;
+      out.push(..._blockToDocx(el, pb));
+    });
+  });
+  return out;
+}
+
 async function exportWord() {
-  const logoData = await getLogoDataUrl();
-  const fullHtml = buildWordHtml(logoData);
-  // 頁邊距與列印版一致:上下18mm、左右16mm(單位twip)
-  const blob = htmlDocx.asBlob(fullHtml, { margins: { top: 1021, right: 907, bottom: 1021, left: 907 } });
+  const root = document.getElementById("previewRoot");
+  const cover = root.querySelector(".cover-page");
+  const back = root.querySelector(".cover-back-page");
+  const contentPages = Array.from(root.querySelectorAll("section.contract-page"));
+  const cfg = CONTRACT_TYPES[currentType];
+  const docCode = cfg.version + "版" + cfg.label;
+
+  const pageProps = {
+    size: { width: 11906, height: 16838 },
+    margin: { top: 1021, bottom: 1021, left: 907, right: 907 }
+  };
+
+  const footerRuns = [
+    new docx.TextRun({ text: "第 ", size: 16, color: "777777" }),
+    new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 16, color: "777777" }),
+    new docx.TextRun({ text: " 頁", size: 16, color: "777777" }),
+    new docx.TextRun({ text: "\t" + docCode, size: 16, color: "777777" })
+  ];
+  const footer = new docx.Footer({
+    children: [new docx.Paragraph({
+      tabStops: [{ type: docx.TabStopType.RIGHT, position: DOCX_CONTENT_W }],
+      children: footerRuns,
+      border: { top: { style: docx.BorderStyle.SINGLE, size: 2, color: "CCCCCC" } }
+    })]
+  });
+
+  const doc = new docx.Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: { ascii: "SimSun", eastAsia: "SimSun", hAnsi: "SimSun" }, size: 25 },
+          paragraph: { spacing: { line: 400, lineRule: "auto" } }
+        }
+      }
+    },
+    sections: [
+      {
+        properties: { page: pageProps },
+        children: [..._coverChildren(cover), ..._coverBackChildren(back)]
+      },
+      {
+        properties: { page: Object.assign({}, pageProps, { pageNumbers: { start: 1 } }) },
+        footers: { default: footer },
+        children: _contractChildren(contentPages)
+      }
+    ]
+  });
+
+  const blob = await docx.Packer.toBlob(doc);
   downloadBlob(blob, buildFileName("docx"));
 }
 

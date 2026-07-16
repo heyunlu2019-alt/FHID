@@ -24,4 +24,5 @@
 - `templates.js` - 合約範本文字
 - `app.js` - 互動邏輯與資料
 - `assets/logo.png` - 公司 LOGO
-- `lib/html-docx.js` - Word 匯出用第三方函式庫
+- `lib/docx.iife.js` - Word 匯出引擎(docx,產生原生Word文件)
+- `lib/logo-data.js` - LOGO base64(Word匯出內嵌用)
