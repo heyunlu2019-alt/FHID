@@ -320,7 +320,7 @@ function paginate(html, docCode) {
   const mm = pxPerMm();
   const availHeight = (297 - 18 - 18) * mm - 52; // A4 高度 － 上下留白 － 頁尾（含列印誤差安全邊距）
 
-  const blocks = Array.from(measurer.children).map(el => {
+  let blocks = Array.from(measurer.children).map(el => {
     const st = getComputedStyle(el);
     const mT = parseFloat(st.marginTop), mB = parseFloat(st.marginBottom);
     return {
@@ -331,6 +331,37 @@ function paginate(html, docCode) {
       isSpecial: el.classList.contains("sign-area") || el.classList.contains("appendix-fixed")
     };
   });
+
+  // 設計/客變硬性規則:第一條(含前導)整頁塞入第1頁、第二條(含付款表+匯款資訊)整頁塞入第2頁。
+  // 放不下時以 --fit 係數微縮該頁行距與間距(下限0.77,維持可讀),其餘頁面正常流動。
+  const forcedPages = [];
+  if (currentType !== "engineering") {
+    const idx2 = blocks.findIndex(b => b.isHeading && b.el.textContent.trim().startsWith("第二條"));
+    const idx3 = blocks.findIndex(b => b.isHeading && b.el.textContent.trim().startsWith("第三條"));
+    if (idx2 > 0 && idx3 > idx2) {
+      const measureSubset = els => els.reduce((a, el) => {
+        const st = getComputedStyle(el);
+        return a + el.offsetHeight + parseFloat(st.marginTop) + parseFloat(st.marginBottom);
+      }, 0);
+      const fitOne = els => {
+        for (const f of [1, 0.96, 0.92, 0.88, 0.84, 0.8, 0.77]) {
+          measurer.style.setProperty("--fit", f);
+          const h = measureSubset(els);
+          if (h <= availHeight) { measurer.style.removeProperty("--fit"); return { f, h }; }
+        }
+        const h = measureSubset(els);
+        measurer.style.removeProperty("--fit");
+        return { f: 0.77, h };
+      };
+      const partA = blocks.slice(0, idx2);
+      const partB = blocks.slice(idx2, idx3);
+      const fa = fitOne(partA.map(b => b.el));
+      const fb = fitOne(partB.map(b => b.el));
+      forcedPages.push({ blocks: partA, used: fa.h, fit: fa.f });
+      forcedPages.push({ blocks: partB, used: fb.h, fit: fb.f });
+      blocks = blocks.slice(idx3);
+    }
+  }
 
   // 依大項目分組:標題與其後內文為一組(同一件事盡量同頁)
   const groups = [];
@@ -410,11 +441,13 @@ function paginate(html, docCode) {
       pages = pgs; bestKey = key;
     }
   });
+  pages = forcedPages.concat(pages);
 
   // 垂直勻版:各頁剩餘空間平均分配到條款起始處,版面均勻不留大片空白
   // (簽約頁除外:簽約表固定、日期壓底;最末頁不硬撐)
   pages.forEach((pg, pi) => {
     if (pg.blocks.some(b => b.isSign)) return;
+    if (pg.fit && pg.fit < 1) return; // 強制塞頁已微縮,不再勻版
     let leftover = availHeight - pg.used;
     if (leftover <= 0) return;
     const isLast = pi === pages.length - 1;
@@ -444,7 +477,8 @@ function paginate(html, docCode) {
   const total = pages.length;
   const out = pages.map((pg, i) => {
     const cls = pg.blocks.some(b => b.isSign) ? "page contract-page sign-page" : "page contract-page";
-    return `<section class="${cls}">${pg.blocks.map(b => b.el.outerHTML).join("")}` +
+    const fitStyle = (pg.fit && pg.fit < 1) ? ` style="--fit:${pg.fit}"` : "";
+    return `<section class="${cls}"${fitStyle}>${pg.blocks.map(b => b.el.outerHTML).join("")}` +
       `<div class="page-footer"><span>第 ${i + 1} 頁，共 ${total} 頁</span><span>${docCode}</span></div>` +
       `</section>`;
   }).join("");
@@ -598,12 +632,18 @@ function render() {
 
 // ---------------- 匯出 ----------------
 
+// 統一檔名:成舍x案件名稱_類型合約_西元日期(日期取簽約日期,未填則取今天)
+function buildFileBase() {
+  const typeShort = currentType === "engineering" ? "工程" : (currentType === "design_custom" ? "客變" : "設計");
+  const nameEl = document.querySelector('[name="cover_projectName"]');
+  const caseName = ((nameEl && nameEl.value.trim()) || "未命名案件").replace(/[\\/:*?"<>|]/g, "");
+  const dateEl = document.querySelector('[name="signDate"]');
+  const date = ((dateEl && dateEl.value) || new Date().toISOString().slice(0, 10)).replace(/-/g, "");
+  return `成舍x${caseName}_${typeShort}合約_${date}`;
+}
+
 function buildFileName(ext) {
-  const cfg = CONTRACT_TYPES[currentType];
-  const nameEl = document.querySelector('[name="partyA_name"]');
-  const partyA = (nameEl && nameEl.value.trim()) || "未命名";
-  const today = new Date().toISOString().slice(0, 10);
-  return `${cfg.label}_${partyA}_${today}.${ext}`;
+  return `${buildFileBase()}.${ext}`;
 }
 
 // ---------------- Word 匯出(原生 docx) ----------------
@@ -615,6 +655,8 @@ const DOCX_CONTENT_W = 10092;  // A4 寬 11906 - 左右邊距 907*2 (twip)
 const DOCX_BODY_H = 14796;     // A4 高 16838 - 上下邊距 1021*2 (twip)
 const DOCX_SUB_INDENT = 250;   // 編號小項縮排(約一個全形字)
 const PX2TWIP = 15;            // 預覽 px → twip(1px = 0.75pt = 15twip),勻版間距換算用
+let WORD_FIT = 1;              // 目前頁面縮放係數(對應預覽 --fit,強制塞頁用)
+const _ft = v => Math.round(v * WORD_FIT);
 
 function _noBorder() {
   const n = { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" };
@@ -715,8 +757,9 @@ function _parasFromP(el, opts) {
       alignment: docx.AlignmentType.JUSTIFIED,
       indent: indent ? { left: indent } : undefined,
       spacing: {
-        before: i === 0 ? baseBefore : 40,
-        after: i === segs.length - 1 ? (isSub ? 30 : 120) : 40
+        before: _ft(i === 0 ? baseBefore : 40),
+        after: _ft(i === segs.length - 1 ? (isSub ? 30 : 120) : 40),
+        line: _ft(472), lineRule: "exact"
       }
     });
   });
@@ -764,7 +807,7 @@ function _tableFrom(tb, colWidths) {
         children: [new docx.Paragraph({
           children: _runsOf(td, 27, isHead),
           alignment: alignRight ? docx.AlignmentType.RIGHT : (alignCenter ? docx.AlignmentType.CENTER : docx.AlignmentType.LEFT),
-          spacing: { before: 0, after: 0, line: 392, lineRule: "exact" }
+          spacing: { before: 0, after: 0, line: _ft(392), lineRule: "exact" }
         })]
       }));
     });
@@ -787,7 +830,7 @@ function _partyTable(tb) {
       margins: { top: 20, bottom: 20, left: 40, right: 40 },
       children: [new docx.Paragraph({
         children: _runsOf(td, 27, td.classList.contains("label")),
-        spacing: { before: 0, after: 0, line: 472, lineRule: "exact" }
+        spacing: { before: 0, after: 0, line: _ft(472), lineRule: "exact" }
       })]
     }));
     rows.push(new docx.TableRow({ children: cells }));
@@ -832,7 +875,7 @@ function _infoBox(box) {
   if (title) {
     paras.push(new docx.Paragraph({
       children: _runsOf(title, 27, true),
-      spacing: { before: 0, after: 60, line: 472, lineRule: "exact" }
+      spacing: { before: 0, after: _ft(60), line: _ft(472), lineRule: "exact" }
     }));
   }
   const clone = box.cloneNode(true);
@@ -842,7 +885,7 @@ function _infoBox(box) {
     _stripLead(seg);
     paras.push(new docx.Paragraph({
       children: _runsOf(seg, 27),
-      spacing: { before: 20, after: 20, line: 472, lineRule: "exact" }
+      spacing: { before: _ft(20), after: _ft(20), line: _ft(472), lineRule: "exact" }
     }));
   });
   const b = { style: docx.BorderStyle.SINGLE, size: 6, color: "998A2E" };
@@ -998,7 +1041,7 @@ function _blockToDocx(el) {
     return [new docx.Paragraph({
       children: [new docx.TextRun({ text: el.textContent.trim(), bold: true, size: 39 })],
       alignment: docx.AlignmentType.CENTER,
-      spacing: { before: 0, after: 300, line: 682, lineRule: "exact" }
+      spacing: { before: 0, after: _ft(300), line: _ft(682), lineRule: "exact" }
     })];
   }
   if (el.classList.contains("party-block")) {
@@ -1061,10 +1104,12 @@ function _contractChildren(pages) {
   const out = [];
   pages.forEach((pg, pi) => {
     if (pi > 0) out.push(_pageBreakPara()); // 分頁符掛在前頁尾端,新頁頁首不留格式標記
+    WORD_FIT = parseFloat(pg.style.getPropertyValue("--fit")) || 1; // 與預覽同步縮放
     Array.from(pg.children).forEach(el => {
       if (el.classList.contains("page-footer")) return;
       out.push(..._blockToDocx(el));
     });
+    WORD_FIT = 1;
   });
   return out;
 }
@@ -1179,7 +1224,13 @@ document.addEventListener("DOMContentLoaded", () => {
     render();
   });
 
-  document.getElementById("btnPrint").addEventListener("click", () => window.print());
+  document.getElementById("btnPrint").addEventListener("click", () => {
+    // 另存PDF的預設檔名=網頁標題,列印期間暫時改為統一檔名
+    const origTitle = document.title;
+    document.title = buildFileBase();
+    window.print();
+    setTimeout(() => { document.title = origTitle; }, 1500);
+  });
   document.getElementById("btnWord").addEventListener("click", exportWord);
   document.getElementById("btnReset").addEventListener("click", () => {
     document.getElementById("contractForm").reset();
