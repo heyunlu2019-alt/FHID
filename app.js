@@ -361,11 +361,36 @@ function paginate(html, docCode) {
         flush();
         cur.push(...grp.blocks); curH += grp.h;
       } else {
-        grp.blocks.forEach((b, i) => {
-          const next = grp.blocks[i + 1];
-          const need = (b.isHeading && next) ? b.h + next.h : b.h;
+        // 組內拆分:編號小項清單(含前導說明列)視為一個單元,不在清單中間斷頁
+        const isSubB = (b) => b.el.classList.contains("sub-item");
+        const units = [];
+        for (let i = 0; i < grp.blocks.length; i++) {
+          const b = grp.blocks[i];
+          const nextIsSub = grp.blocks[i + 1] && isSubB(grp.blocks[i + 1]);
+          if ((isSubB(b) || (!b.isHeading && b.el.tagName === "P" && nextIsSub))) {
+            const u = [b];
+            let j = i + 1;
+            while (j < grp.blocks.length && isSubB(grp.blocks[j])) { u.push(grp.blocks[j]); j++; }
+            units.push(u); i = j - 1;
+          } else {
+            units.push([b]);
+          }
+        }
+        units.forEach((u, ui) => {
+          const uh = u.reduce((a, x) => a + x.h, 0);
+          const next = units[ui + 1];
+          const nh = next ? Math.min(next.reduce((a, x) => a + x.h, 0), availHeight * 0.5) : 0;
+          const isHead = u.length === 1 && u[0].isHeading;
+          const need = isHead ? uh + nh : uh; // 標題不孤懸頁底
           if (cur.length && curH + need > availHeight) flush();
-          cur.push(b); curH += b.h;
+          if (uh > availHeight) {
+            u.forEach(b => {
+              if (cur.length && curH + b.h > availHeight) flush();
+              cur.push(b); curH += b.h;
+            });
+          } else {
+            cur.push(...u); curH += uh;
+          }
         });
       }
       if (grp.sign) flush();
@@ -438,8 +463,19 @@ function setVal(name, value) {
 const SYNC_GROUPS = [
   ["cover_projectName", "eng_projectName", "design_caseName"],
   ["cover_siteAddress", "eng_projectLocation", "design_siteAddress"],
-  ["cover_designer", "partyB_designer"]
+  ["cover_designer", "partyB_designer"],
+  // 乙方名稱=匯款戶名(兩處都壓公司大章,必須一致)
+  ["partyB_branchName", "eng_bankAccountName", "design_bankAccountName"]
 ];
+
+// 乙方名稱/匯款戶名:承德為公司登記所在地,名稱即「成舍企業股份有限公司」不加分公司;
+// 其他分公司加「X分公司」,例:成舍企業股份有限公司中山分公司
+function branchCompanyName(bKey) {
+  const pb = PARTY_B_DEFAULT;
+  if (bKey === "承德公司") return pb.name;
+  const b = BRANCHES[bKey];
+  return pb.name + (b ? b.short : bKey.replace(/公司$/, "")) + "分公司";
+}
 
 function syncLinkedFields(sourceName) {
   for (const grp of SYNC_GROUPS) {
@@ -466,7 +502,10 @@ function applyBranchDefaults(type, branchName) {
   const bKey = (branchName && cfg.branches[branchName]) ? branchName : Object.keys(cfg.branches)[0];
   const b = cfg.branches[bKey];
   const pb = cfg.partyB;
-  setVal("partyB_branchName", pb.name + (type === "engineering" ? "" : bKey));
+  const companyName = branchCompanyName(bKey);
+  setVal("partyB_branchName", companyName);
+  setVal("eng_bankAccountName", companyName);
+  setVal("design_bankAccountName", companyName);
   setVal("partyB_rep", pb.rep);
   setVal("partyB_agent", "");
   setVal("partyB_address", b.addr);
