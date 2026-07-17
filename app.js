@@ -1117,10 +1117,22 @@ function _contractChildren(pages) {
   const out = [];
   pages.forEach((pg, pi) => {
     if (pi > 0) out.push(_pageBreakPara()); // 分頁符掛在前頁尾端,新頁頁首不留格式標記
-    WORD_FIT = parseFloat(pg.style.getPropertyValue("--fit")) || 1; // 與預覽同步縮放
+    const fitF = parseFloat(pg.style.getPropertyValue("--fit")) || 1;
     WORD_SIGN_PRECEDING = 0;
     const signEl = pg.querySelector(".sign-area");
-    if (signEl) {
+    if (!signEl) {
+      // 版面平衡:依本頁內容量計算行距係數,讓每頁底部留白一致
+      // (Word 頁面可用高度比預覽多約1.4cm,內容少的頁行距微放大、壓縮頁放鬆)
+      let usedPx = 0;
+      Array.from(pg.children).forEach(elx => {
+        if (elx.classList.contains("page-footer")) return;
+        const stx = getComputedStyle(elx);
+        usedPx += elx.offsetHeight + parseFloat(stx.marginTop) + parseFloat(stx.marginBottom);
+      });
+      const naturalTw = (usedPx / fitF) * 15;
+      WORD_FIT = naturalTw > 0 ? Math.min(1.1, Math.max(0.8, (DOCX_BODY_H - 500) / naturalTw)) : 1;
+    } else {
+      WORD_FIT = fitF; // 簽約頁維持原係數(日期壓底由填充處理)
       let px = 0;
       Array.from(pg.children).forEach(elx => {
         if (elx === signEl || elx.classList.contains("page-footer")) return;
