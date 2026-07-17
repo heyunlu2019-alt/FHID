@@ -568,11 +568,14 @@ function buildFileName(ext) {
 }
 
 // ---------------- Word 匯出(原生 docx) ----------------
-// 直接產生原生 Word 段落/表格/頁碼,不經 HTML 轉換,格式才能與預覽/PDF一致。
-// 注意:spacing.line 搭配 lineRule:"auto" 時,單位是 1/240 行(即 360=1.5倍行距)。
+// 直接產生原生 Word 段落/表格/頁碼。字級行距與網頁預覽/PDF完全對應:
+// 預覽18px=13.5pt(size 27)、行距1.75(line 420)、每行字數一致,分頁自然對齊。
+// 注意:spacing.line 搭配 lineRule:"auto" 時,單位是 1/240 行(倍數)。
 
-const DOCX_CONTENT_W = 10092; // A4 寬 11906 - 左右邊距 907*2 (twip)
-const DOCX_SUB_INDENT = 250;  // 編號小項縮排(約一個全形字)
+const DOCX_CONTENT_W = 10092;  // A4 寬 11906 - 左右邊距 907*2 (twip)
+const DOCX_BODY_H = 14796;     // A4 高 16838 - 上下邊距 1021*2 (twip)
+const DOCX_SUB_INDENT = 250;   // 編號小項縮排(約一個全形字)
+const PX2TWIP = 15;            // 預覽 px → twip(1px = 0.75pt = 15twip),勻版間距換算用
 
 function _noBorder() {
   const n = { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" };
@@ -584,7 +587,13 @@ function _gridBorder() {
   return { top: b, bottom: b, left: b, right: b };
 }
 
-// 元素內文(含 <b>、.fill 底線欄位)→ TextRun 陣列(不處理 <br>,由段落切割負責)
+// 預覽勻版引擎寫入的行內 marginTop(px)→ 段前距(twip);沒有就用預設值
+function _beforeTwips(el, fallback) {
+  const mt = el && el.style ? parseFloat(el.style.marginTop) : NaN;
+  return isNaN(mt) ? fallback : Math.round(mt * PX2TWIP);
+}
+
+// 元素內文(含 <b>、.fill 底線欄位)→ TextRun 陣列(<br> 由段落切割處理)
 function _inlineRuns(el, fmt, runs) {
   el.childNodes.forEach(n => {
     if (n.nodeType === Node.TEXT_NODE) {
@@ -616,7 +625,7 @@ function _inlineRuns(el, fmt, runs) {
 
 function _runsOf(el, size, bold) {
   const runs = [];
-  _inlineRuns(el, { size: size || 24, bold: !!bold }, runs);
+  _inlineRuns(el, { size: size || 27, bold: !!bold }, runs);
   return runs;
 }
 
@@ -636,7 +645,7 @@ function _segmentsOf(el) {
   return segs.filter(s => s.textContent.replace(/[\s　]/g, "") !== "" || s.querySelector(".fill"));
 }
 
-// 去掉片段開頭的全形/半形空白,回傳是否有前導縮排
+// 去掉片段開頭的全形/半形空白,回傳前導空白數
 function _stripLead(seg) {
   let lead = 0;
   const walker = document.createTreeWalker(seg, NodeFilter.SHOW_TEXT);
@@ -656,6 +665,7 @@ function _parasFromP(el, opts) {
   opts = opts || {};
   const isSub = el.classList && el.classList.contains("sub-item");
   const isHeading = el.tagName === "P" && el.querySelector("b") && el.textContent.trim().length <= 16;
+  const baseBefore = _beforeTwips(el, isSub ? 30 : (isHeading ? 300 : 120));
   const segs = _segmentsOf(el);
   return segs.map((seg, i) => {
     const lead = _stripLead(seg);
@@ -666,10 +676,9 @@ function _parasFromP(el, opts) {
       alignment: docx.AlignmentType.JUSTIFIED,
       indent: indent ? { left: indent } : undefined,
       spacing: {
-        before: i === 0 ? (isSub ? 10 : (isHeading ? 200 : 80)) : 30,
-        after: i === segs.length - 1 ? (isSub ? 10 : 80) : 30
-      },
-      pageBreakBefore: !!opts.pageBreakBefore && i === 0
+        before: i === 0 ? baseBefore : 40,
+        after: i === segs.length - 1 ? (isSub ? 30 : 120) : 40
+      }
     });
   });
 }
@@ -677,19 +686,22 @@ function _parasFromP(el, opts) {
 function _textPara(text, opts) {
   opts = opts || {};
   return new docx.Paragraph({
-    children: [new docx.TextRun({ text, bold: opts.bold, size: opts.size || 24, color: opts.color })],
+    children: [new docx.TextRun({ text, bold: opts.bold, size: opts.size || 27, color: opts.color })],
     alignment: opts.alignment,
     spacing: opts.spacing || { before: 40, after: 40 },
-    pageBreakBefore: !!opts.pageBreakBefore,
     border: opts.border
   });
 }
 
+// 分頁符:放在前一頁尾端的極小段落(不用 pageBreakBefore,避免 Word 顯示黑色小方塊格式標記)
 function _pageBreakPara() {
-  return new docx.Paragraph({ children: [new docx.PageBreak()], spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } });
+  return new docx.Paragraph({
+    children: [new docx.PageBreak()],
+    spacing: { before: 0, after: 0, line: 14, lineRule: "exact" }
+  });
 }
 
-// 付款表/階段表(有框、表頭底色、金額靠右)
+// 付款表/階段表(有框、表頭底色、金額靠右);字級與預覽一致(18px=27),表內行距1.45
 function _tableFrom(tb, colWidths) {
   const rows = [];
   tb.querySelectorAll("tr").forEach(tr => {
@@ -708,16 +720,16 @@ function _tableFrom(tb, colWidths) {
         columnSpan: span > 1 ? span : undefined,
         borders: _gridBorder(),
         shading: isHead ? { fill: "FAF3D1" } : undefined,
-        margins: { top: 40, bottom: 40, left: 80, right: 80 },
+        margins: { top: 30, bottom: 30, left: 80, right: 80 },
         verticalAlign: docx.VerticalAlign.TOP,
         children: [new docx.Paragraph({
-          children: _runsOf(td, 21, isHead),
+          children: _runsOf(td, 27, isHead),
           alignment: alignRight ? docx.AlignmentType.RIGHT : (alignCenter ? docx.AlignmentType.CENTER : docx.AlignmentType.LEFT),
-          spacing: { before: 0, after: 0, line: 280, lineRule: "auto" }
+          spacing: { before: 0, after: 0, line: 392, lineRule: "exact" }
         })]
       }));
     });
-    rows.push(new docx.TableRow({ children: cells }));
+    rows.push(new docx.TableRow({ cantSplit: true, children: cells }));
   });
   return new docx.Table({
     width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA },
@@ -735,8 +747,8 @@ function _partyTable(tb) {
       columnSpan: td.colSpan > 1 ? td.colSpan : undefined,
       margins: { top: 20, bottom: 20, left: 40, right: 40 },
       children: [new docx.Paragraph({
-        children: _runsOf(td, 24, td.classList.contains("label")),
-        spacing: { before: 0, after: 0, line: 300, lineRule: "auto" }
+        children: _runsOf(td, 27, td.classList.contains("label")),
+        spacing: { before: 0, after: 0, line: 472, lineRule: "exact" }
       })]
     }));
     rows.push(new docx.TableRow({ children: cells }));
@@ -744,7 +756,7 @@ function _partyTable(tb) {
   return new docx.Table({ width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA }, rows });
 }
 
-// 簽名表(甲乙各半、值欄底線、列高預留用印)
+// 簽名表(甲乙各半、值欄底線、列高與預覽一致:首列預留大章)
 function _signTable(tb) {
   const widths = [2725, 2321, 1716, 3330];
   const rows = [];
@@ -760,27 +772,28 @@ function _signTable(tb) {
         verticalAlign: docx.VerticalAlign.BOTTOM,
         margins: { top: 20, bottom: 20, left: 20, right: 60 },
         children: [new docx.Paragraph({
-          children: _runsOf(td, 21),
-          spacing: { before: 0, after: 0, line: 260, lineRule: "auto" }
+          children: _runsOf(td, 22),
+          spacing: { before: 0, after: 0, line: 394, lineRule: "exact" }
         })]
       });
     });
     rows.push(new docx.TableRow({
-      height: { value: ri === 0 ? 900 : 540, rule: docx.HeightRule.ATLEAST },
+      height: { value: ri === 0 ? 1400 : 720, rule: docx.HeightRule.ATLEAST },
+      cantSplit: true,
       children: cells
     }));
   });
   return new docx.Table({ width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA }, columnWidths: widths, rows });
 }
 
-// 匯款資訊框(單格表格+底色)
+// 匯款資訊框(單格表格+底色),字級與內文相同
 function _infoBox(box) {
   const paras = [];
   const title = box.querySelector(".payment-info-title");
   if (title) {
     paras.push(new docx.Paragraph({
-      children: _runsOf(title, 22, true),
-      spacing: { before: 0, after: 60, line: 300, lineRule: "auto" }
+      children: _runsOf(title, 27, true),
+      spacing: { before: 0, after: 60, line: 472, lineRule: "exact" }
     }));
   }
   const clone = box.cloneNode(true);
@@ -789,14 +802,15 @@ function _infoBox(box) {
   _segmentsOf(clone).forEach(seg => {
     _stripLead(seg);
     paras.push(new docx.Paragraph({
-      children: _runsOf(seg, 22),
-      spacing: { before: 20, after: 20, line: 300, lineRule: "auto" }
+      children: _runsOf(seg, 27),
+      spacing: { before: 20, after: 20, line: 472, lineRule: "exact" }
     }));
   });
   const b = { style: docx.BorderStyle.SINGLE, size: 6, color: "998A2E" };
   return new docx.Table({
     width: { size: DOCX_CONTENT_W, type: docx.WidthType.DXA },
     rows: [new docx.TableRow({
+      cantSplit: true,
       children: [new docx.TableCell({
         borders: { top: b, bottom: b, left: b, right: b },
         shading: { fill: "FFFDF3" },
@@ -820,26 +834,30 @@ function _logoRun() {
   } catch (e) { return null; }
 }
 
-// 封面(單頁)
+// 封面(單頁,底部資訊區用填充推到頁底,與預覽一致)
 function _coverChildren(cover) {
   const out = [];
-  Array.from(cover.querySelector(".cover-title").textContent.trim()).forEach((ch, i) => {
+  const chars = Array.from(cover.querySelector(".cover-title").textContent.trim());
+  chars.forEach((ch, i) => {
     out.push(new docx.Paragraph({
       children: [new docx.TextRun({ text: ch, size: 44 })],
       alignment: docx.AlignmentType.CENTER,
-      spacing: { before: i === 0 ? 1100 : 30, after: 30, line: 260, lineRule: "auto" }
+      spacing: { before: i === 0 ? 1100 : 30, after: 30, line: 660, lineRule: "exact" }
     }));
   });
   const badge = cover.querySelector(".cover-badge");
-  if (badge && badge.textContent.trim()) {
+  const hasBadge = badge && badge.textContent.trim();
+  if (hasBadge) {
     out.push(_textPara(badge.textContent.trim(), {
       alignment: docx.AlignmentType.CENTER, bold: true, size: 21, color: "B8960C",
-      spacing: { before: 60, after: 0, line: 260, lineRule: "auto" }
+      spacing: { before: 60, after: 0, line: 320, lineRule: "exact" }
     }));
   }
-  for (let i = 0; i < 5; i++) {
-    out.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } }));
-  }
+  // 中段填充:把 LOGO/欄位/分公司/資訊列推到頁底(估算頁高扣除上下內容)
+  const titleH = 1100 + chars.length * 720 + (hasBadge ? 380 : 0);
+  const bottomH = 5 * 474 + 180 + 510 + 322 + 3 * 280; // 欄位5列+分隔線+品牌列+分公司列+資訊列3列
+  const filler = Math.max(600, DOCX_BODY_H - titleH - bottomH - 700);
+  out.push(new docx.Paragraph({ text: "", spacing: { before: filler, after: 0, line: 14, lineRule: "exact" } }));
 
   const fieldParas = Array.from(cover.querySelectorAll(".cover-row")).map(r => {
     const label = r.querySelector(".cover-label");
@@ -850,7 +868,7 @@ function _coverChildren(cover) {
         new docx.TextRun({ text: (label ? label.textContent.trim() : "") + "：", size: 22 }),
         new docx.TextRun({ text: val, size: 22, underline: { type: docx.UnderlineType.SINGLE } })
       ],
-      spacing: { before: 40, after: 40, line: 280, lineRule: "auto" }
+      spacing: { before: 40, after: 40, line: 394, lineRule: "exact" }
     });
   });
   const logoRun = _logoRun();
@@ -870,13 +888,13 @@ function _coverChildren(cover) {
     })]
   }));
   out.push(new docx.Paragraph({
-    text: "", spacing: { before: 60, after: 20, line: 100, lineRule: "auto" },
+    text: "", spacing: { before: 60, after: 20, line: 120, lineRule: "exact" },
     border: { bottom: { style: docx.BorderStyle.SINGLE, size: 12, color: "333333" } }
   }));
   const brand = cover.querySelector(".cover-brand-name");
   if (brand) {
     out.push(_textPara(brand.textContent.trim(), {
-      size: 26, spacing: { before: 40, after: 20, line: 280, lineRule: "auto" }
+      size: 26, spacing: { before: 40, after: 20, line: 446, lineRule: "exact" }
     }));
   }
   const branches = cover.querySelector(".cover-branches");
@@ -887,7 +905,7 @@ function _coverChildren(cover) {
       const name = chk.textContent.replace(/[■□✔]/g, "").trim();
       runs.push(new docx.TextRun({ text: (sel ? "■" : "□") + name + "　", size: 18 }));
     });
-    out.push(new docx.Paragraph({ children: runs, spacing: { before: 0, after: 20, line: 240, lineRule: "auto" } }));
+    out.push(new docx.Paragraph({ children: runs, spacing: { before: 0, after: 20, line: 302, lineRule: "exact" } }));
   }
   const bar = cover.querySelector(".cover-footer-bar");
   if (bar) {
@@ -898,11 +916,11 @@ function _coverChildren(cover) {
         children: [
           new docx.TableCell({
             borders: _noBorder(),
-            children: [_textPara(cells[i] || "", { size: 17, spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } })]
+            children: [_textPara(cells[i] || "", { size: 17, spacing: { before: 0, after: 0, line: 280, lineRule: "exact" } })]
           }),
           new docx.TableCell({
             borders: _noBorder(),
-            children: [_textPara(cells[i + 1] || "", { size: 17, alignment: docx.AlignmentType.RIGHT, spacing: { before: 0, after: 0, line: 240, lineRule: "auto" } })]
+            children: [_textPara(cells[i + 1] || "", { size: 17, alignment: docx.AlignmentType.RIGHT, spacing: { before: 0, after: 0, line: 280, lineRule: "exact" } })]
           })
         ]
       }));
@@ -914,22 +932,21 @@ function _coverChildren(cover) {
 
 // 封底(分公司地址列表,單頁)
 function _coverBackChildren(back) {
-  const out = [];
+  const out = [_pageBreakPara()];
   let first = true;
   Array.from(back.children).forEach(div => {
     if (div.classList.contains("branch-block")) {
       Array.from(div.children).forEach((line, li) => {
         out.push(new docx.Paragraph({
           children: [new docx.TextRun({ text: line.textContent.trim(), bold: li === 0, size: 18 })],
-          spacing: { before: li === 0 && !first ? 70 : 0, after: 0, line: 250, lineRule: "auto" },
-          pageBreakBefore: first && li === 0
+          spacing: { before: li === 0 && !first ? 70 : 0, after: 0, line: 270, lineRule: "exact" }
         }));
         if (li === 0) first = false;
       });
     } else if (div.classList.contains("branch-email")) {
       out.push(new docx.Paragraph({
         children: [new docx.TextRun({ text: div.textContent.trim(), size: 18 })],
-        spacing: { before: 140, after: 0, line: 250, lineRule: "auto" }
+        spacing: { before: 140, after: 0, line: 270, lineRule: "exact" }
       }));
     }
   });
@@ -937,52 +954,49 @@ function _coverBackChildren(back) {
 }
 
 // 內文區塊 → docx 元素
-function _blockToDocx(el, pb) {
+function _blockToDocx(el) {
   if (el.tagName === "H1") {
     return [new docx.Paragraph({
-      children: [new docx.TextRun({ text: el.textContent.trim(), bold: true, size: 36 })],
+      children: [new docx.TextRun({ text: el.textContent.trim(), bold: true, size: 39 })],
       alignment: docx.AlignmentType.CENTER,
-      spacing: { before: 0, after: 240 },
-      pageBreakBefore: pb
+      spacing: { before: 0, after: 300, line: 682, lineRule: "exact" }
     })];
   }
   if (el.classList.contains("party-block")) {
-    const arr = [];
-    if (pb) arr.push(_pageBreakPara());
-    arr.push(_partyTable(el.querySelector("table")));
-    return arr;
+    return [_partyTable(el.querySelector("table"))];
   }
-  if (el.tagName === "P") return _parasFromP(el, { pageBreakBefore: pb });
+  if (el.tagName === "P") return _parasFromP(el);
   if (el.tagName === "TABLE") {
-    const arr = [];
-    if (pb) arr.push(_pageBreakPara());
     const isStage = el.classList.contains("stage-table");
-    arr.push(_tableFrom(el, isStage ? [1500, 4792, 800, 3000] : [1900, 4392, 800, 3000]));
-    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 120, lineRule: "auto" } }));
-    return arr;
+    return [
+      _tableFrom(el, isStage ? [1500, 4792, 800, 3000] : [1900, 4392, 800, 3000]),
+      new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 120, lineRule: "exact" } })
+    ];
   }
   if (el.classList.contains("payment-info-box")) {
-    const arr = [];
-    if (pb) arr.push(_pageBreakPara());
-    arr.push(_infoBox(el));
-    arr.push(new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 120, lineRule: "auto" } }));
-    return arr;
+    return [
+      _infoBox(el),
+      new docx.Paragraph({ text: "", spacing: { before: 0, after: 0, line: 120, lineRule: "exact" } })
+    ];
   }
   if (el.classList.contains("appendix-list")) {
-    return Array.from(el.children).map((d, i) => new docx.Paragraph({
-      children: _runsOf(d, 24),
-      spacing: { before: 20, after: 20 },
-      pageBreakBefore: pb && i === 0
+    return Array.from(el.children).map(d => new docx.Paragraph({
+      children: _runsOf(d, 27),
+      spacing: { before: 30, after: 30 }
     }));
   }
   if (el.classList.contains("sign-area")) {
     const arr = [];
-    if (pb) arr.push(_pageBreakPara());
-    arr.push(_signTable(el.querySelector(".sign-table")));
+    const tb = el.querySelector(".sign-table");
+    arr.push(_signTable(tb));
     const df = el.querySelector(".doc-footer");
     if (df) {
+      // 日期壓底:依簽名表實際列數計算填充距離,把日期推到頁面底部(與預覽一致)
+      const rowCount = tb.rows.length;
+      const tableH = 1400 + (rowCount - 1) * 720;
+      const filler = Math.max(300, DOCX_BODY_H - tableH - 1300);
       arr.push(_textPara(df.textContent.trim(), {
-        alignment: docx.AlignmentType.CENTER, spacing: { before: 700, after: 0 }
+        alignment: docx.AlignmentType.CENTER, spacing: { before: filler, after: 0 }
       }));
     }
     return arr;
@@ -990,7 +1004,7 @@ function _blockToDocx(el, pb) {
   if (el.classList.contains("appendix-fixed")) {
     const arr = [];
     arr.push(new docx.Paragraph({
-      text: "", pageBreakBefore: pb, spacing: { before: 0, after: 60, line: 100, lineRule: "auto" },
+      text: "", spacing: { before: 0, after: 80, line: 120, lineRule: "exact" },
       border: { bottom: { style: docx.BorderStyle.DOTTED, size: 4, color: "AAAAAA" } }
     }));
     Array.from(el.children).forEach(p => arr.push(..._parasFromP(p)));
@@ -998,21 +1012,19 @@ function _blockToDocx(el, pb) {
   }
   if (el.classList.contains("doc-footer")) {
     return [_textPara(el.textContent.trim(), {
-      alignment: docx.AlignmentType.CENTER, spacing: { before: 700, after: 0 }, pageBreakBefore: pb
+      alignment: docx.AlignmentType.CENTER, spacing: { before: 700, after: 0 }
     })];
   }
-  return _parasFromP(el, { pageBreakBefore: pb });
+  return _parasFromP(el);
 }
 
 function _contractChildren(pages) {
   const out = [];
   pages.forEach((pg, pi) => {
-    let needBreak = pi > 0; // 第一頁由分節自然開新頁,之後每頁強制分頁對齊預覽
+    if (pi > 0) out.push(_pageBreakPara()); // 分頁符掛在前頁尾端,新頁頁首不留格式標記
     Array.from(pg.children).forEach(el => {
       if (el.classList.contains("page-footer")) return;
-      const pb = needBreak;
-      needBreak = false;
-      out.push(..._blockToDocx(el, pb));
+      out.push(..._blockToDocx(el));
     });
   });
   return out;
@@ -1047,8 +1059,8 @@ async function exportWord() {
     styles: {
       default: {
         document: {
-          run: { font: { ascii: "SimSun", eastAsia: "SimSun", hAnsi: "SimSun" }, size: 24 },
-          paragraph: { spacing: { line: 340, lineRule: "auto" } }
+          run: { font: { ascii: "SimSun", eastAsia: "SimSun", hAnsi: "SimSun" }, size: 27 },
+          paragraph: { spacing: { line: 472, lineRule: "exact" } }
         }
       }
     },
