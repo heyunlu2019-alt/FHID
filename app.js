@@ -378,17 +378,27 @@ function paginate(html, docCode) {
 
   // 分頁規則:
   // 1. 整組放得下 → 同頁
-  // 2. 放不下且本頁已夠滿(門檻) → 整組換頁(不拆開同一條款)
-  // 3. 其餘情況(組太大或本頁太空) → 組內拆分,但標題不孤懸頁底
+  // 2. 差一點放得下(≥0.93) → 軟塞入:整組收進本頁,該頁以 --fit 微縮
+  // 3. 放不下且本頁已夠滿(門檻) → 整組換頁
+  // 4. 其餘情況 → 組內拆分(清單單元不拆、標題不孤懸頁底,單元也適用軟塞入)
+  // 簽約區整塊不可拆,但可與其他內容同頁(甲乙方欄完整即可)
   const packPages = (threshold) => {
     const pgs = [];
-    let cur = [], curH = 0;
-    const flush = () => { if (cur.length) { pgs.push({ blocks: cur, used: curH }); cur = []; curH = 0; } };
+    let cur = [], curH = 0, soft = false;
+    const flush = () => {
+      if (cur.length) {
+        const pg = { blocks: cur, used: Math.min(curH, availHeight) };
+        if (curH > availHeight) pg.fit = Math.max(0.9, Math.round(availHeight / curH * 100) / 100);
+        pgs.push(pg); cur = []; curH = 0; soft = false;
+      }
+    };
+    const canSoft = (extra) => !soft && cur.length > 0 && (curH + extra) <= availHeight / 0.93;
     groups.forEach(grp => {
-      if (grp.sign) flush(); // 簽約區獨立成頁
       if (curH + grp.h <= availHeight) {
         cur.push(...grp.blocks); curH += grp.h;
-      } else if (grp.h <= availHeight && curH >= availHeight * threshold) {
+      } else if (!grp.sign && canSoft(grp.h)) {
+        cur.push(...grp.blocks); curH += grp.h; soft = true; flush();
+      } else if (grp.h <= availHeight && (grp.sign || curH >= availHeight * threshold)) {
         flush();
         cur.push(...grp.blocks); curH += grp.h;
       } else {
@@ -413,7 +423,10 @@ function paginate(html, docCode) {
           const nh = next ? Math.min(next.reduce((a, x) => a + x.h, 0), availHeight * 0.5) : 0;
           const isHead = u.length === 1 && u[0].isHeading;
           const need = isHead ? uh + nh : uh; // 標題不孤懸頁底
-          if (cur.length && curH + need > availHeight) flush();
+          if (cur.length && curH + need > availHeight) {
+            if (!isHead && canSoft(uh)) { cur.push(...u); curH += uh; soft = true; flush(); return; }
+            flush();
+          }
           if (uh > availHeight) {
             u.forEach(b => {
               if (cur.length && curH + b.h > availHeight) flush();
@@ -424,7 +437,6 @@ function paginate(html, docCode) {
           }
         });
       }
-      if (grp.sign) flush();
     });
     flush();
     return pgs;
@@ -656,6 +668,7 @@ const DOCX_BODY_H = 14796;     // A4 高 16838 - 上下邊距 1021*2 (twip)
 const DOCX_SUB_INDENT = 250;   // 編號小項縮排(約一個全形字)
 const PX2TWIP = 15;            // 預覽 px → twip(1px = 0.75pt = 15twip),勻版間距換算用
 let WORD_FIT = 1;              // 目前頁面縮放係數(對應預覽 --fit,強制塞頁用)
+let WORD_SIGN_PRECEDING = 0;   // 簽約區同頁的前置內容高度(twip),日期壓底計算用
 const _ft = v => Math.round(v * WORD_FIT);
 
 function _noBorder() {
@@ -860,7 +873,7 @@ function _signTable(tb) {
       });
     });
     rows.push(new docx.TableRow({
-      height: { value: ri === 0 ? 1400 : 720, rule: docx.HeightRule.ATLEAST },
+      height: { value: _ft(ri === 0 ? 1400 : 720), rule: docx.HeightRule.ATLEAST },
       cantSplit: true,
       children: cells
     }));
@@ -1075,8 +1088,8 @@ function _blockToDocx(el) {
     if (df) {
       // 日期壓底:依簽名表實際列數計算填充距離,把日期推到頁面底部(與預覽一致)
       const rowCount = tb.rows.length;
-      const tableH = 1400 + (rowCount - 1) * 720;
-      const filler = Math.max(300, DOCX_BODY_H - tableH - 1300);
+      const tableH = _ft(1400) + (rowCount - 1) * _ft(720);
+      const filler = Math.max(300, DOCX_BODY_H - WORD_SIGN_PRECEDING - tableH - 1300);
       arr.push(_textPara(df.textContent.trim(), {
         alignment: docx.AlignmentType.CENTER, spacing: { before: filler, after: 0 }
       }));
@@ -1105,6 +1118,19 @@ function _contractChildren(pages) {
   pages.forEach((pg, pi) => {
     if (pi > 0) out.push(_pageBreakPara()); // 分頁符掛在前頁尾端,新頁頁首不留格式標記
     WORD_FIT = parseFloat(pg.style.getPropertyValue("--fit")) || 1; // 與預覽同步縮放
+    WORD_SIGN_PRECEDING = 0;
+    const signEl = pg.querySelector(".sign-area");
+    if (signEl) {
+      let px = 0;
+      Array.from(pg.children).forEach(elx => {
+        if (elx === signEl || elx.classList.contains("page-footer")) return;
+        if (elx.compareDocumentPosition(signEl) & Node.DOCUMENT_POSITION_FOLLOWING) {
+          const stx = getComputedStyle(elx);
+          px += elx.offsetHeight + parseFloat(stx.marginTop) + parseFloat(stx.marginBottom);
+        }
+      });
+      WORD_SIGN_PRECEDING = Math.round(px * 15);
+    }
     Array.from(pg.children).forEach(el => {
       if (el.classList.contains("page-footer")) return;
       out.push(..._blockToDocx(el));
