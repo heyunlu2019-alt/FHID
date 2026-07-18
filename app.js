@@ -1,8 +1,8 @@
 // ---------------- 資料設定 ----------------
 
 // 分公司資料來源：fullhouseid.com 官網「公司組織．分公司」各分點頁面(2026-07 擷取)
-// 注意：官網「中山公司」頁面位址與「大安公司」相同、「南西公司」頁面位址與「民生公司」相同，
-// 疑似官網資料尚未更新，先照官網現況列出，可於表單中手動修正。
+// 註：中山公司與大安公司、南西公司與民生公司地址相同 → 經確認為實際共用辦公室，非資料錯誤，勿更動。
+// 各欄位仍可於表單中手動修正。
 const BRANCHES = {
   "承德公司": { short: "承德", addr: "103 台北市大同區承德路一段17號B棟6F-1", tel: "+886-2-2556-1197", fax: "+886-2-2558-4694" },
   "大安公司": { short: "大安", addr: "106 台北市大安區復興南路一段203號12樓", tel: "+886-2-8772-0899", fax: "+886-2-8772-5699" },
@@ -1217,6 +1217,101 @@ async function exportWord() {
   downloadBlob(blob, buildFileName("docx"));
 }
 
+// ---------------- 自動存草稿(本機瀏覽器,不上傳) ----------------
+
+const DRAFT_KEY = "chengde_contract_draft_v1";
+let _draftTimer = null;
+
+function collectFormData() {
+  const form = document.getElementById("contractForm");
+  const data = { type: currentType, ts: Date.now(), fields: {} };
+  Array.from(form.elements).forEach(el => {
+    if (el.name) data.fields[el.name] = el.value;
+  });
+  return data;
+}
+
+function saveDraft() {
+  try {
+    const data = collectFormData();
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+    const st = document.getElementById("autosaveStatus");
+    if (st) {
+      const t = new Date(data.ts);
+      st.textContent = `已自動儲存 ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}`;
+    }
+  } catch (e) { /* 隱私模式或空間不足時靜默略過 */ }
+}
+
+function scheduleSaveDraft() {
+  clearTimeout(_draftTimer);
+  _draftTimer = setTimeout(saveDraft, 500);
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  const st = document.getElementById("autosaveStatus");
+  if (st) st.textContent = "";
+}
+
+function loadDraftRaw() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function restoreDraft(data) {
+  if (!data) return;
+  if (data.type && CONTRACT_TYPES[data.type]) switchType(data.type); // 先切換類型(會套預設值)
+  Object.entries(data.fields || {}).forEach(([name, val]) => {
+    const el = document.querySelector(`[name="${name}"]`);
+    if (el) el.value = val;
+  });
+  updateEngRowVisibility();
+  render();
+  saveDraft();
+}
+
+function showDraftBanner(data) {
+  const banner = document.getElementById("draftBanner");
+  const text = document.getElementById("draftBannerText");
+  if (!banner || !data) return;
+  const t = new Date(data.ts);
+  const typeLabel = (CONTRACT_TYPES[data.type] || {}).label || "合約";
+  const proj = (data.fields && (data.fields.cover_projectName || data.fields.partyA_name)) || "";
+  const when = `${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}`;
+  text.textContent = `偵測到未完成的${typeLabel}草稿${proj ? "（" + proj + "）" : ""}，儲存於 ${when}`;
+  banner.hidden = false;
+}
+
+// ---------------- 匯出前必填檢查 ----------------
+
+function findMissingFields() {
+  const val = n => { const el = document.querySelector(`[name="${n}"]`); return el ? el.value.trim() : ""; };
+  const missing = [];
+  if (!val("cover_projectName")) missing.push("案件名稱");
+  if (!val("partyA_name")) missing.push("甲方名稱");
+  if (!val("signDate")) missing.push("簽約日期");
+  if (currentType === "engineering") {
+    if (!val("eng_totalAmount")) missing.push("工程總價");
+    const sum = ["eng_ms1_pct","eng_ms2_pct","eng_ms3_pct","eng_ms4_pct","eng_ms5_pct"]
+      .reduce((a,n)=>a+(Number(val(n))||0),0);
+    if (sum !== 100) missing.push(`工程付款比例總和為 ${sum}%（非100%）`);
+  } else {
+    if (!val("design_pricePerPing") && !val("design_totalFeeOverride")) missing.push("設計費（每坪或總計）");
+    if (!val("design_ping") && !val("design_totalFeeOverride")) missing.push("坪數");
+  }
+  return missing;
+}
+
+// 匯出/列印前確認;有缺漏時警告但允許繼續(可能刻意留白手寫)
+function confirmBeforeExport() {
+  const missing = findMissingFields();
+  if (!missing.length) return true;
+  return window.confirm("以下欄位尚未填寫或需確認：\n\n・" + missing.join("\n・") + "\n\n仍要繼續匯出嗎？");
+}
+
 // ---------------- 事件綁定 ----------------
 
 function switchType(type) {
@@ -1274,24 +1369,44 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("contractForm").addEventListener("input", (e) => {
     if (e.target && e.target.name) syncLinkedFields(e.target.name);
     render();
+    scheduleSaveDraft();
   });
 
   document.getElementById("btnPrint").addEventListener("click", () => {
+    if (!confirmBeforeExport()) return;
     // 另存PDF的預設檔名=網頁標題,列印期間暫時改為統一檔名
     const origTitle = document.title;
     document.title = buildFileBase();
     window.print();
     setTimeout(() => { document.title = origTitle; }, 1500);
   });
-  document.getElementById("btnWord").addEventListener("click", exportWord);
+  document.getElementById("btnWord").addEventListener("click", () => {
+    if (!confirmBeforeExport()) return;
+    exportWord();
+  });
   document.getElementById("btnReset").addEventListener("click", () => {
+    if (!window.confirm("確定要清空表單嗎？（會一併刪除自動儲存的草稿）")) return;
     document.getElementById("contractForm").reset();
     signDateInput.value = new Date().toISOString().slice(0, 10);
     switchType(currentType);
     applyEngPreset(document.getElementById("engPresetSelect").value);
+    clearDraft();
+  });
+
+  // 草稿還原橫幅
+  document.getElementById("btnRestoreDraft").addEventListener("click", () => {
+    restoreDraft(loadDraftRaw());
+    document.getElementById("draftBanner").hidden = true;
+  });
+  document.getElementById("btnDiscardDraft").addEventListener("click", () => {
+    clearDraft();
+    document.getElementById("draftBanner").hidden = true;
   });
 
   switchType("engineering");
+
+  const draft = loadDraftRaw();
+  if (draft && draft.fields) showDraftBanner(draft);
 
   let _fitTimer = null;
   window.addEventListener("resize", () => {

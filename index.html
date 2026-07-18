@@ -20,11 +20,19 @@
 <main class="app-main">
 
   <section class="form-panel no-print">
+    <div id="draftBanner" class="draft-banner" hidden>
+      <span id="draftBannerText"></span>
+      <span class="draft-banner-btns">
+        <button type="button" id="btnRestoreDraft">接續填寫</button>
+        <button type="button" id="btnDiscardDraft">捨棄</button>
+      </span>
+    </div>
     <div class="toolbar">
       <button id="btnPrint">🖨 列印 / 另存 PDF</button>
       <button id="btnWord">📄 另存 Word</button>
       <button id="btnReset">↺ 清空表單</button>
     </div>
+    <div id="autosaveStatus" class="autosave-status"></div>
 
     <form id="contractForm">
 
