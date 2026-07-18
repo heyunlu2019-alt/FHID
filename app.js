@@ -599,6 +599,7 @@ function render() {
   const totalFee = d.design_totalFeeOverride ? Number(d.design_totalFeeOverride) : calcFee;
   d.design_totalFee_fmt = totalFee ? fmtMoney(totalFee) : "";
   d.design_pricePerPing = d.design_pricePerPing ? fmtMoney(d.design_pricePerPing) : "";
+  d.design_taxNote = d.design_taxNote || "含稅";
 
   const pctInputs = [d.design_pct1, d.design_pct2, d.design_pct3, d.design_pct4];
   const pcts = STAGE_DEFAULT_PCT[variant].map((def, i) => (pctInputs[i] === undefined || pctInputs[i] === "") ? def : Number(pctInputs[i]));
@@ -640,6 +641,19 @@ function render() {
     paginate(fillTemplate(cfg.template, d), docCode);
 
   document.getElementById("previewRoot").innerHTML = html;
+  fitPreview();
+}
+
+// 螢幕預覽:合約頁(210mm)若比容器寬,整頁等比例縮小顯示(內部排版完全不變)。
+// 只影響螢幕觀看;列印/Word匯出讀的是原始未縮放的DOM尺寸,不受影響。
+function fitPreview() {
+  const root = document.getElementById("previewRoot");
+  if (!root) return;
+  const panel = root.parentElement;
+  const avail = panel.clientWidth;
+  const pageW = 210 * pxPerMm();
+  const scale = Math.min(1, avail / (pageW + 2));
+  root.style.zoom = scale < 0.999 ? scale : "";
 }
 
 // ---------------- 匯出 ----------------
@@ -1278,4 +1292,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   switchType("engineering");
+
+  let _fitTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(_fitTimer);
+    _fitTimer = setTimeout(fitPreview, 120);
+  });
 });

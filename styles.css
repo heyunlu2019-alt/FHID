@@ -260,6 +260,8 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
   .no-print { display: none !important; }
   body { background: #fff; }
   .app-main { padding: 0; display: block; }
+  /* 列印/存PDF一律以真實A4尺寸輸出,螢幕縮放不影響 */
+  #previewRoot { zoom: 1 !important; transform: none !important; }
   .preview-panel { gap: 0; align-items: stretch; }
   .page {
     box-shadow: none;
@@ -284,4 +286,25 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 @page {
   size: A4;
   margin: 0;
+}
+
+/* ---- 響應式:平板/手機把表單疊在預覽上方,合約頁等比例縮小顯示(內部排版不變) ---- */
+@media (max-width: 900px) {
+  .app-header { gap: 10px 14px; padding: 8px 12px; }
+  .app-header h1 { font-size: 15px; white-space: normal; }
+  .brand-logo { height: 20px; }
+  .tab-btn { font-size: 13px; padding: 5px 10px; }
+  .app-main { flex-direction: column; padding: 10px; gap: 12px; }
+  .form-panel {
+    width: 100%;
+    position: static;
+    top: 0;
+    max-height: none;
+  }
+  .preview-panel { width: 100%; }
+  .form-panel input, .form-panel select { font-size: 16px; } /* iOS 聚焦不自動放大版面 */
+}
+@media (max-width: 480px) {
+  .app-header h1 { font-size: 14px; }
+  .toolbar button { font-size: 12px; padding: 9px 4px; }
 }
