@@ -1,22 +1,71 @@
 // ---------------- 資料設定 ----------------
 
-// 分公司資料來源：fullhouseid.com 官網「公司組織．分公司」各分點頁面(2026-07 擷取)
-// 註：中山公司與大安公司、南西公司與民生公司地址相同 → 經確認為實際共用辦公室，非資料錯誤，勿更動。
-// 各欄位仍可於表單中手動修正。
-const BRANCHES = {
-  "承德公司": { short: "承德", addr: "103 台北市大同區承德路一段17號B棟6F-1", tel: "+886-2-2556-1197", fax: "+886-2-2558-4694" },
-  "大安公司": { short: "大安", addr: "106 台北市大安區復興南路一段203號12樓", tel: "+886-2-8772-0899", fax: "+886-2-8772-5699" },
-  "復興一部": { short: "復興一部", addr: "105 台北市松山區復興北路35號10F", tel: "+886-2-2778-3398", fax: "+886-2-2778-3435" },
-  "復興二部": { short: "復興二部", addr: "台北市敦化北路309號3樓之3", tel: "+886-2-8772-1277", fax: "+886-2-2713-8939" },
-  "復興台中": { short: "復興台中", addr: "403 台中市西區台灣大道二段218號6樓之3", tel: "+886-4-2328-6008", fax: "+886-4-2328-6001" },
-  "忠孝公司": { short: "忠孝", addr: "110 台北市信義區忠孝東路五段1-5號12F", tel: "+886-2-3765-3933", fax: "+886-2-3765-3935" },
-  "民生公司": { short: "民生", addr: "104 台北市中山區民生東路二段143號6F", tel: "+886-2-2507-2578", fax: "+886-2-2506-5478" },
-  "中山公司": { short: "中山", addr: "106 台北市大安區復興南路一段203號12樓", tel: "+886-2-7729-7155", fax: "+886-2-8772-5699" },
-  "中山台南": { short: "台南", addr: "700 台南市西門路三段159號8樓之3", tel: "+886-6-222-3058", fax: "+886-6-222-3239" },
-  "南西公司": { short: "南西", addr: "104 台北市中山區民生東路二段143號6F", tel: "+886-2-2555-5918", fax: "+886-2-2506-5478" },
-  "南京公司": { short: "南京", addr: "台北市松山區南京東路四段180號8F-3", tel: "+886-2-2579-3667", fax: "+886-2-2579-0667" },
-  "敦北公司": { short: "敦北", addr: "台北市敦化北路309號3樓之3", tel: "+886-2-2713-8838", fax: "+886-2-2713-8939" }
+// ===== 法人主體(entity) =====
+// 各主體有各自的負責人、統一編號、E-mail、匯款帳戶;同主體的分公司共用這些資料。
+// 乙方名稱 = 匯款戶名(兩處都要用印,必須一致)。
+// 新增一間公司:在此加一筆主體,再於下方 BRANCHES 把該分公司的 entity 指過去即可。
+const ENTITIES = {
+  // 承德=公司登記所在地,名稱不帶分公司(來源:存摺+原始Word檔,已核實)
+  chengde: {
+    label: "成舍企業(承德)",
+    company: "成舍企業股份有限公司",
+    rep: "詹美珠",
+    taxId: "86320066",
+    email: "fullhouseid@mail2000.com.tw",
+    bank: "822中國信託(承德分行)",
+    bankAccount: "624-53000074-9"
+  },
+  // 復興分公司(來源:使用者提供之復興公司資訊截圖 + 原始設計合約Word檔,已核實)
+  fuxing: {
+    label: "成舍企業(復興分公司)",
+    company: "成舍企業股份有限公司 復興分公司",
+    rep: "陳俊夫",
+    taxId: "80295717",
+    email: "fhid@mail2000.com.tw",
+    bank: "822中國信託(承德分行)",
+    bankAccount: "624-540010570"
+  }
 };
+
+// ===== 分公司(branch) =====
+// entity = 所屬法人主體;pending=true 表示該分公司的主體資料尚未提供,
+//          暫用承德主體+自動加「X分公司」字樣,表單會顯示待確認提醒。
+// 註:中山與大安、南西與民生地址相同 → 經確認為實際共用辦公室,非資料錯誤,勿更動。
+// 地址/電話來源:fullhouseid.com 官網各分點頁面(2026-07 擷取);各欄位仍可於表單手動修正。
+const BRANCHES = {
+  "承德公司": { short: "承德", entity: "chengde", addr: "103 台北市大同區承德路一段17號B棟6F-1", tel: "+886-2-2556-1197", fax: "+886-2-2558-4694" },
+  "復興一部": { short: "復興一部", entity: "fuxing", agent: "林志鴻", addr: "105 台北市松山區復興北路35號10樓", tel: "+886-2-2778-3398", fax: "+886-2-2778-3435" },
+  "復興二部": { short: "復興二部", entity: "fuxing", addr: "台北市敦化北路309號3樓之3", tel: "+886-2-8772-1277", fax: "+886-2-2713-8939" },
+  "復興台中": { short: "復興台中", entity: "fuxing", addr: "403 台中市西區台灣大道二段218號6樓之3", tel: "+886-4-2328-6008", fax: "+886-4-2328-6001" },
+  "大安公司": { short: "大安", entity: "chengde", pending: true, addr: "106 台北市大安區復興南路一段203號12樓", tel: "+886-2-8772-0899", fax: "+886-2-8772-5699" },
+  "忠孝公司": { short: "忠孝", entity: "chengde", pending: true, addr: "110 台北市信義區忠孝東路五段1-5號12F", tel: "+886-2-3765-3933", fax: "+886-2-3765-3935" },
+  "民生公司": { short: "民生", entity: "chengde", pending: true, addr: "104 台北市中山區民生東路二段143號6F", tel: "+886-2-2507-2578", fax: "+886-2-2506-5478" },
+  "中山公司": { short: "中山", entity: "chengde", pending: true, addr: "106 台北市大安區復興南路一段203號12樓", tel: "+886-2-7729-7155", fax: "+886-2-8772-5699" },
+  "中山台南": { short: "台南", entity: "chengde", pending: true, addr: "700 台南市西門路三段159號8樓之3", tel: "+886-6-222-3058", fax: "+886-6-222-3239" },
+  "南西公司": { short: "南西", entity: "chengde", pending: true, addr: "104 台北市中山區民生東路二段143號6F", tel: "+886-2-2555-5918", fax: "+886-2-2506-5478" },
+  "南京公司": { short: "南京", entity: "chengde", pending: true, addr: "台北市松山區南京東路四段180號8F-3", tel: "+886-2-2579-3667", fax: "+886-2-2579-0667" },
+  "敦北公司": { short: "敦北", entity: "chengde", pending: true, addr: "台北市敦化北路309號3樓之3", tel: "+886-2-2713-8838", fax: "+886-2-2713-8939" }
+};
+
+// 取得分公司的完整乙方資料(主體資料 + 分公司地址電話)
+function branchProfile(bKey) {
+  const b = BRANCHES[bKey] || BRANCHES["承德公司"];
+  const ent = ENTITIES[b.entity] || ENTITIES.chengde;
+  return {
+    // 資料未確認的分公司:沿用舊規則自動加「X分公司」,避免用錯主體名稱
+    company: b.pending ? ent.company + b.short + "分公司" : ent.company,
+    rep: ent.rep,
+    taxId: ent.taxId,
+    email: ent.email,
+    bank: ent.bank,
+    bankAccount: ent.bankAccount,
+    agent: b.agent || "",
+    addr: b.addr,
+    tel: b.tel,
+    fax: b.fax,
+    pending: !!b.pending
+  };
+}
 
 const COMPANY_WEBSITE = "WWW.FULLHOUSEID.COM.TW";
 const COMPANY_HOTLINE = "0809-080158";
@@ -29,7 +78,7 @@ function toLocalPhone(intl) {
   return `${area}-${rest}`;
 }
 
-const PARTY_B_DEFAULT = { name: "成舍企業股份有限公司", rep: "詹美珠", id: "86320066", email: "fullhouseid@mail2000.com.tw", defaultBranch: "承德公司" };
+const PARTY_B_DEFAULT = { defaultBranch: "承德公司" };
 
 // version = 公司合約修訂版本(依原始Word檔案版次,勿隨意變動;僅錯字/排版修正不改版)
 const CONTRACT_TYPES = {
@@ -514,15 +563,6 @@ const SYNC_GROUPS = [
   ["partyB_branchName", "eng_bankAccountName", "design_bankAccountName"]
 ];
 
-// 乙方名稱/匯款戶名:承德為公司登記所在地,名稱即「成舍企業股份有限公司」不加分公司;
-// 其他分公司加「X分公司」,例:成舍企業股份有限公司中山分公司
-function branchCompanyName(bKey) {
-  const pb = PARTY_B_DEFAULT;
-  if (bKey === "承德公司") return pb.name;
-  const b = BRANCHES[bKey];
-  return pb.name + (b ? b.short : bKey.replace(/公司$/, "")) + "分公司";
-}
-
 function syncLinkedFields(sourceName) {
   for (const grp of SYNC_GROUPS) {
     if (!grp.includes(sourceName)) continue;
@@ -536,30 +576,43 @@ function syncAllFromCover() {
   SYNC_GROUPS.forEach(grp => syncLinkedFields(grp[0]));
 }
 
-function populateBranchSelect(type) {
+// 切換合約類型時保留目前選定的分公司(各分公司法人資料不同,不可默默重設)
+function populateBranchSelect(type, preferBranch) {
   const cfg = CONTRACT_TYPES[type];
   const select = document.getElementById("branchSelect");
   select.innerHTML = Object.keys(cfg.branches).map(name => `<option value="${name}">${name}</option>`).join("");
-  select.value = cfg.partyB.defaultBranch;
+  select.value = (preferBranch && cfg.branches[preferBranch]) ? preferBranch : cfg.partyB.defaultBranch;
+  return select.value;
 }
 
+// 依所選分公司帶入該法人主體的完整乙方資料(名稱/負責人/統編/E-mail/匯款帳戶)
 function applyBranchDefaults(type, branchName) {
   const cfg = CONTRACT_TYPES[type];
   const bKey = (branchName && cfg.branches[branchName]) ? branchName : Object.keys(cfg.branches)[0];
-  const b = cfg.branches[bKey];
-  const pb = cfg.partyB;
-  const companyName = branchCompanyName(bKey);
-  setVal("partyB_branchName", companyName);
-  setVal("eng_bankAccountName", companyName);
-  setVal("design_bankAccountName", companyName);
-  setVal("partyB_rep", pb.rep);
-  setVal("partyB_agent", "");
-  setVal("partyB_address", b.addr);
-  setVal("partyB_id", pb.id);
-  setVal("partyB_phone", b.tel);
-  setVal("partyB_fax", b.fax);
+  const p = branchProfile(bKey);
+  setVal("partyB_branchName", p.company);
+  setVal("eng_bankAccountName", p.company);
+  setVal("design_bankAccountName", p.company);
+  setVal("partyB_rep", p.rep);
+  setVal("partyB_agent", p.agent);
+  setVal("partyB_address", p.addr);
+  setVal("partyB_id", p.taxId);
+  setVal("partyB_phone", p.tel);
+  setVal("partyB_fax", p.fax);
   setVal("partyB_designer", "");
-  setVal("partyB_email", pb.email);
+  setVal("partyB_email", p.email);
+  setVal("eng_bank", p.bank);
+  setVal("eng_bankAccount", p.bankAccount);
+  setVal("design_bank", p.bank);
+  setVal("design_bankAccount", p.bankAccount);
+  // 資料未確認的分公司給提醒,避免誤用承德的統編/帳號出合約
+  const warn = document.getElementById("branchPendingWarn");
+  if (warn) {
+    warn.hidden = !p.pending;
+    warn.textContent = p.pending
+      ? `⚠ ${bKey} 的公司資料(負責人／統編／匯款帳號)尚未提供，目前暫用承德資料，請務必核對後再出合約。`
+      : "";
+  }
 }
 
 // ---------------- 主要渲染 ----------------
@@ -1324,8 +1377,9 @@ function switchType(type) {
   document.getElementById("fieldset_eng_payment").style.display = isEng ? "" : "none";
   document.getElementById("fieldset_eng_appendix").style.display = isEng ? "" : "none";
   document.getElementById("fieldset_design").style.display = isEng ? "none" : "";
-  populateBranchSelect(type);
-  applyBranchDefaults(type, CONTRACT_TYPES[type].partyB.defaultBranch);
+  const prevBranch = (document.getElementById("branchSelect") || {}).value;
+  const useBranch = populateBranchSelect(type, prevBranch);
+  applyBranchDefaults(type, useBranch);
   syncAllFromCover();
 
   if (type !== "engineering") {

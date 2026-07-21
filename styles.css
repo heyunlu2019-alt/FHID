@@ -122,6 +122,11 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
 }
 .form-panel label.inline input { display: inline-block; width: auto; margin-top: 0; }
 .hint { font-size: 11px; color: #888; margin: 6px 0; }
+.pending-warn {
+  font-size: 11px; line-height: 1.6; color: #9a3412;
+  background: #fff4ed; border: 1px solid #fdba74; border-radius: 5px;
+  padding: 6px 8px; margin-bottom: 10px;
+}
 
 .payment-row-grid {
   display: grid;
