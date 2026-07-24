@@ -281,16 +281,25 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
   /* 列印/存PDF一律以真實A4尺寸輸出,螢幕縮放不影響 */
   #previewRoot { zoom: 1 !important; transform: none !important; }
   .preview-panel { gap: 0; align-items: stretch; }
+  /* 每頁固定高度(非 min-height)並禁止被拆頁:
+     margin-top:auto 的頁尾若貼齊紙張邊界，列印的次像素進位會把它擠到下一張，
+     造成「頁尾單獨一張」「封面資訊列跑到第2張」與尾端空白頁。
+     296mm 留 1mm 進位餘裕；overflow:hidden 為最後防線(JS 分頁已保證內容放得下)。 */
   .page {
     box-shadow: none;
     border: none;
-    width: auto;
-    min-height: 296mm;
+    width: 210mm;
+    height: 296mm;
+    min-height: 0;
+    overflow: hidden;
     page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
     margin: 0;
     padding: 18mm 16mm;
   }
-  .page:last-child { page-break-after: auto; }
+  .page:last-child { page-break-after: auto; break-after: auto; }
   /* 任何內容區塊不得被頁面邊界裁切（雙重保險：分頁已由 JS 量測，這裡再禁止瀏覽器切割區塊） */
   .contract-page p,
   .party-table, .payment-table, .stage-table, .appendix-table,
