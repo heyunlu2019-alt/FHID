@@ -315,8 +315,11 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
   margin: 0;
 }
 
-/* ---- 響應式:平板/手機把表單疊在預覽上方,合約頁等比例縮小顯示(內部排版不變) ---- */
-@media (max-width: 900px) {
+/* ---- 響應式:平板/手機把表單疊在預覽上方,合約頁等比例縮小顯示(內部排版不變) ----
+   ⚠ 必須寫 screen:列印時 Chrome 會把版面寬度設為紙張寬(A4≈794px),
+   若不限定 screen,這裡的規則會在列印時命中並覆蓋上面的 @media print,
+   曾導致 app-main 多出 10px 內距把內容往下推、頁尾溢出到下一張紙。 */
+@media screen and (max-width: 900px) {
   .app-header { gap: 10px 14px; padding: 8px 12px; }
   .app-header h1 { font-size: 15px; white-space: normal; }
   .brand-logo { height: 20px; }
@@ -331,7 +334,7 @@ legend small { font-weight: normal; color: #777; font-size: 11px; }
   .preview-panel { width: 100%; }
   .form-panel input, .form-panel select { font-size: 16px; } /* iOS 聚焦不自動放大版面 */
 }
-@media (max-width: 480px) {
+@media screen and (max-width: 480px) {
   .app-header h1 { font-size: 14px; }
   .toolbar button { font-size: 12px; padding: 9px 4px; }
 }
